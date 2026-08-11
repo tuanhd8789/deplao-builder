@@ -1,4 +1,4 @@
-export type AIPlatform = 'openai' | 'gemini' | 'claude' | 'deepseek' | 'grok' | 'mistral' | '9router' | 'openrouter';
+export type AIPlatform = 'openai' | 'gemini' | 'claude' | 'deepseek' | 'grok' | 'mistral' | '9router' | 'openrouter' | 'openai-compatible';
 
 export interface AIAssistant {
     id: string;

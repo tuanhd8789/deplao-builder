@@ -1106,6 +1106,7 @@ const CONFIG_SCHEMA: Record<string, Field[]> = {
         { value: 'grok',     label: 'Grok (xAI)' },
         { value: 'mistral',  label: 'Mistral AI' },
         { value: 'openrouter', label: 'OpenRouter' },
+        { value: 'openai-compatible', label: 'OpenAI Compatible' },
       ],
       hideWhenKey: 'aiConfigMode', hideWhenValue: 'assistant',
       clearsKeyOnChange: ['model'],
@@ -1168,6 +1169,8 @@ const CONFIG_SCHEMA: Record<string, Field[]> = {
         { value: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick - Meta, open-source (OpenRouter)' },
         { value: 'qwen/qwen3-max',              label: 'Qwen3 Max - Alibaba (OpenRouter)' },
         { value: 'mistralai/mistral-large-2',   label: 'Mistral Large 2 (OpenRouter)' },
+        // OpenAI Compatible
+        { value: '__custom__',                  label: 'Custom model - Tự nhập Model ID (OpenAI Compatible)' },
       ],
       optionsFilter: { key: 'platform', map: {
         openai:   ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna', 'gpt-5.4', 'gpt-5.4-pro', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5-mini', 'gpt-5-nano', 'gpt-5', 'o4-mini', 'o3', 'gpt-4.1'],
@@ -1177,6 +1180,7 @@ const CONFIG_SCHEMA: Record<string, Field[]> = {
         grok:     ['grok-4-fast', 'grok-4', 'grok-4-mini', 'grok-4-mini-fast', 'grok-3'],
         mistral:  ['mistral-large-2-latest', 'codestral-2-latest', 'mistral-small-3-latest', 'mistral-medium-latest', 'open-mistral-nemo-2'],
         openrouter: ['openrouter/auto', 'openai/gpt-5.4-mini', 'anthropic/claude-4.6-sonnet', 'google/gemini-3.5-flash', 'deepseek/deepseek-v4-flash', 'meta-llama/llama-4-maverick', 'qwen/qwen3-max', 'mistralai/mistral-large-2'],
+        'openai-compatible': ['__custom__'],
       }},
       hideWhenKey: 'aiConfigMode', hideWhenValue: 'assistant',
     },
@@ -1248,6 +1252,7 @@ const CONFIG_SCHEMA: Record<string, Field[]> = {
         { value: 'grok',     label: 'Grok (xAI)' },
         { value: 'mistral',  label: 'Mistral AI' },
         { value: 'openrouter', label: 'OpenRouter' },
+        { value: 'openai-compatible', label: 'OpenAI Compatible' },
       ],
       hideWhenKey: 'aiConfigMode', hideWhenValue: 'assistant',
       clearsKeyOnChange: ['model'],

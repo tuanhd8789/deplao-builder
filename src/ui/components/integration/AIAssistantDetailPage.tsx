@@ -25,6 +25,7 @@ const PLATFORMS = [
   { value: 'mistral',  label: 'Mistral AI',      icon: <RefreshIcon className="w-4 h-4" />, color: 'bg-sky-600' },
   { value: '9router',  label: '9Router Proxy',   icon: <ShuffleIcon className="w-4 h-4" />, color: 'bg-cyan-600' },
   { value: 'openrouter', label: 'OpenRouter',    icon: <ShuffleIcon className="w-4 h-4" />, color: 'bg-indigo-600' },
+  { value: 'openai-compatible', label: 'OpenAI Compatible', icon: <GlobeIcon className="w-4 h-4" />, color: 'bg-teal-600' },
 ] as const;
 
 const MODELS_BY_PLATFORM: Record<string, { value: string; label: string }[]> = {
@@ -105,6 +106,9 @@ const MODELS_BY_PLATFORM: Record<string, { value: string; label: string }[]> = {
     { value: 'qwen/qwen3-max',              label: 'Qwen3 Max (Alibaba)' },
     { value: 'mistralai/mistral-large-2',   label: 'Mistral Large 2' },
     { value: '__custom__',                  label: 'Custom model - tự nhập...' },
+  ],
+  'openai-compatible': [
+    { value: '__custom__',  label: 'Custom model - tự nhập Model ID...' },
   ],
 };
 
@@ -669,7 +673,7 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">Model</label>
-                  {(platform === '9router' || platform === 'openrouter') ? (
+                  {(platform === '9router' || platform === 'openrouter' || platform === 'openai-compatible') ? (
                     <div className="space-y-1.5">
                       <select value={isCustomModel && model !== '__custom__' ? '__custom__' : model}
                         onChange={e => {
@@ -729,6 +733,7 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
                 {platform === 'mistral' && 'Lấy tại: console.mistral.ai/api-keys'}
                 {platform === '9router' && 'Lấy từ Dashboard -> API Keys 9router tại http://localhost:20128/dashboard'}
                 {platform === 'openrouter' && 'Lấy tại: openrouter.ai/settings/keys'}
+                {platform === 'openai-compatible' && 'Nhập API key từ nhà cung cấp AI tương thích OpenAI API'}
               </p>
               {platform === '9router' && (
                 <div className="mt-2 flex items-center gap-2">
@@ -1020,12 +1025,16 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
 
               {/* Base URL override */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Base URL (tuỳ chọn)</label>
+                <label className="block text-xs text-gray-400 mb-1">
+                  {platform === 'openai-compatible' ? 'API URL *' : 'Base URL (tuỳ chọn)'}
+                </label>
                 <input type="text" value={baseUrl} onChange={e => setBaseUrl(e.target.value)}
-                  placeholder={platform === '9router' ? 'http://localhost:20128' : platform === 'openrouter' ? 'https://openrouter.ai/api' : 'https://api.custom-proxy.com'}
+                  placeholder={platform === 'openai-compatible' ? 'https://api.your-provider.com/v1/chat/completions' : platform === '9router' ? 'http://localhost:20128' : platform === 'openrouter' ? 'https://openrouter.ai/api' : 'https://api.custom-proxy.com'}
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"/>
                 <p className="text-[10px] text-gray-400 mt-1">
-                  Ghi đè endpoint API. Để trống để dùng URL mặc định. Hữu ích khi dùng proxy như 9Router, OpenRouter, hoặc các API gateway khác.
+                  {platform === 'openai-compatible'
+                    ? 'Nhập URL endpoint API tương thích OpenAI. VD: https://api.together.xyz/v1/chat/completions, https://api.groq.com/openai/v1/chat/completions'
+                    : 'Ghi đè endpoint API. Để trống để dùng URL mặc định. Hữu ích khi dùng proxy như 9Router, OpenRouter, hoặc các API gateway khác.'}
                 </p>
               </div>
 

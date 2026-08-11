@@ -47,6 +47,7 @@ const AI_PLATFORMS: { key: string; label: string; icon: React.ReactNode; color: 
   { key: 'deepseek', label: 'DeepSeek', icon: <TargetIcon className="w-4 h-4" />, color: 'bg-purple-600',  desc: 'DeepSeek V3, R1' },
   { key: 'grok',     label: 'Grok',     icon: <LightningIcon className="w-4 h-4" />, color: 'bg-orange-600',  desc: 'Grok 3, Grok 3 Mini' },
   { key: 'openrouter', label: 'OpenRouter', icon: <ShuffleIcon className="w-4 h-4" />, color: 'bg-indigo-600', desc: 'Gateway nhiều model qua một API key' },
+  { key: 'openai-compatible', label: 'OpenAI Compatible', icon: <GlobeIcon className="w-4 h-4" />, color: 'bg-teal-600', desc: 'Kết nối bất kỳ API tương thích OpenAI (Together, Groq, LM Studio...)' },
 ];
 
 const AI_PLATFORM_META: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
@@ -56,6 +57,7 @@ const AI_PLATFORM_META: Record<string, { label: string; color: string; icon: Rea
   deepseek: { label: 'DeepSeek', color: 'bg-purple-600',  icon: <TargetIcon className="w-4 h-4" /> },
   grok:     { label: 'Grok',     color: 'bg-orange-600',  icon: <LightningIcon className="w-4 h-4" /> },
   openrouter: { label: 'OpenRouter', color: 'bg-indigo-600', icon: <ShuffleIcon className="w-4 h-4" /> },
+  'openai-compatible': { label: 'OpenAI Compatible', color: 'bg-teal-600', icon: <GlobeIcon className="w-4 h-4" /> },
 };
 
 const CATALOG: Record<string, CatalogItem[]> = {
