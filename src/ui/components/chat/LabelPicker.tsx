@@ -206,7 +206,9 @@ export function EditLabelsModal({ labels, labelsVersion, onClose, onSave, overri
         : useAccountStore.getState().getActiveAccount();
       if (!accObj) throw new Error('No account');
       const auth = { cookies: accObj.cookies, imei: accObj.imei, userAgent: accObj.user_agent };
-      const res = await ipc.zalo?.updateLabels({ auth, labelData: editedLabels, version: labelsVersion });
+      const vRes = await ipc.zalo?.getLabels({ auth });
+      const freshVersion: number = vRes?.response?.version ?? vRes?.response?.ver ?? vRes?.response?.v ?? labelsVersion;
+      const res = await ipc.zalo?.updateLabels({ auth, labelData: editedLabels, version: freshVersion });
       if (res?.success && res.response) {
         onSave(res.response.labelData, res.response.version);
         showNotification('Đã lưu thay đổi', 'success');
