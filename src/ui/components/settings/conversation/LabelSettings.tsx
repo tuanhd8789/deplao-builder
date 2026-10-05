@@ -544,7 +544,9 @@ function ZaloLabelsEditModal({ zaloId, accountName, initialLabels, buildAuth, on
     setSaving(true); setSaveError(null);
     try {
       const labelData = labels.map(l => ({ ...l, id: (l.id ?? 0) < 0 ? undefined : l.id }));
-      const res = await ipc.zalo?.updateLabels({ auth, labelData, version });
+      const vRes = await ipc.zalo?.getLabels({ auth });
+      const freshVer: number = vRes?.response?.version ?? vRes?.response?.ver ?? vRes?.response?.v ?? version;
+      const res = await ipc.zalo?.updateLabels({ auth, labelData, version: freshVer });
       if (res?.success) { onSaved(); }
       else { setSaveError(res?.error || 'Cập nhật nhãn Zalo thất bại'); }
     } catch (err: any) {

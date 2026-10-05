@@ -12,6 +12,7 @@ const PLATFORM_META: Record<string, { label: string; color: string; icon: React.
   claude:   { label: 'Claude',   color: 'bg-amber-600',   icon: <AlertIcon className="w-4 h-4" /> },
   deepseek: { label: 'DeepSeek', color: 'bg-purple-600',  icon: <TargetIcon className="w-4 h-4" /> },
   grok:     { label: 'Grok',     color: 'bg-orange-600',  icon: <LightningIcon className="w-4 h-4" /> },
+  'openai-compatible': { label: 'OpenAI Compatible', color: 'bg-teal-600', icon: <BotIcon className="w-4 h-4" /> },
 };
 
 interface AIAssistantSummary {

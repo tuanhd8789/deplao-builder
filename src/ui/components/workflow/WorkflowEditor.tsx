@@ -744,6 +744,7 @@ export default function WorkflowEditor({ workflowId, onBack }: Props) {
 
         {selectedNode && (
           <NodeConfigPanel
+            key={selectedNode.id}
             node={selectedNode}
             nodes={nodes}
             edges={edges}
