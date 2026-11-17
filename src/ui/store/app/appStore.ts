@@ -407,7 +407,7 @@ function loadAiQuickPanelContextCountOverride(): number | null {
     if (!stored) return null;
     const parsed = Number(stored);
     if (!Number.isFinite(parsed)) return null;
-    return Math.min(100, Math.max(1, Math.round(parsed)));
+    return Math.min(1000, Math.max(1, Math.round(parsed)));
   } catch {}
   return null;
 }
@@ -580,7 +580,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setAiQuickPanelContextCountOverride: (count) => {
     const normalized = count === null
       ? null
-      : Math.min(100, Math.max(1, Math.round(Number(count) || 30)));
+      : Math.min(1000, Math.max(1, Math.round(Number(count) || 30)));
     try {
       if (normalized === null) localStorage.removeItem('ai_quick_panel_context_count_override');
       else localStorage.setItem('ai_quick_panel_context_count_override', String(normalized));

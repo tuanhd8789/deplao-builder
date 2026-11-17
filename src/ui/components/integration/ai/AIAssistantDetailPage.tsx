@@ -1024,8 +1024,8 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
               {/* Context message count */}
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">{tr('Số tin nhắn lịch sử (ngữ cảnh)')}</label>
-                <input type="number" min={1} max={100} step={1} value={contextMessageCount}
-                  onChange={e => setContextMessageCount(Math.max(1, Math.min(100, parseInt(e.target.value) || 30)))}
+                <input type="number" min={1} max={1000} step={1} value={contextMessageCount}
+                  onChange={e => setContextMessageCount(Math.max(1, Math.min(1000, parseInt(e.target.value) || 30)))}
                   className="w-full bg-muted border border-input rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-blue-500"/>
                 <p className="text-[10px] text-muted-foreground mt-1">
                   {tr('Số tin nhắn gần nhất được nạp làm ngữ cảnh cho AI khi gợi ý và trả lời. Mặc định 30.')}

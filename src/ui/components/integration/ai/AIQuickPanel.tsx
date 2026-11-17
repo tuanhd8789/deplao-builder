@@ -6,6 +6,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ipc from '@/lib/ipc';
+import DataAccessor from '@/lib/data/DataAccessor';
 import { useChatStore } from '@/store/chat/chatStore';
 import { useAccountStore } from '@/store/accounts/accountStore';
 import { useAppStore } from '@/store/app/appStore';
@@ -42,7 +43,7 @@ const PLATFORM_ICON_TEXTS: Record<string, string> = {
   openai: '[AI]', gemini: '[G]', deepseek: '[DS]', grok: '[Grok]',
 };
 
-const clampContextCount = (value: number) => Math.min(100, Math.max(1, Math.round(value)));
+const clampContextCount = (value: number) => Math.min(1000, Math.max(1, Math.round(value)));
 
 export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
   const [assistants, setAssistants] = useState<AssistantSummary[]>([]);
@@ -154,22 +155,54 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
   }, [effectiveContextMsgCount]);
 
   /** Get the current Zalo conversation context (returns null if there is none) */
-  const getRawZaloChatContext = useCallback((): string | null => {
+  const getRawZaloChatContext = useCallback(async (): Promise<string | null> => {
     if (!activeAccountId || !activeThreadId) return null;
     const key = `${activeAccountId}_${activeThreadId}`;
-    const msgs = useChatStore.getState().messages[key] || [];
+    let msgs: any[] = useChatStore.getState().messages[key] || [];
+    // The store only keeps a few recently loaded messages: fetch more from DB when needed
+    if (msgs.length < effectiveContextMsgCount) {
+      try {
+        // The IPC layer caps each page (<=200), so page backwards with a `before` cursor until we have enough.
+        const PAGE = 100;
+        const seen = new Set<string>();
+        const all: any[] = [];
+        let before: number | undefined;
+        for (let i = 0; i < 40 && all.length < effectiveContextMsgCount; i++) {
+          const res: any = await DataAccessor.getMessages({
+            zaloId: activeAccountId, threadId: activeThreadId, limit: PAGE, offset: 0, ...(before ? { before } : {}),
+          });
+          const page: any[] = res?.messages || res?.items || [];
+          let added = 0;
+          for (const m of page) {
+            const id = String(m.msg_id ?? m.id ?? `${m.timestamp}_${all.length}`);
+            if (seen.has(id)) continue;
+            seen.add(id); all.push(m); added++;
+          }
+          if (added === 0 || page.length === 0) break;
+          const oldest = Math.min(...page.map((m: any) => Number(m.timestamp) || Infinity));
+          if (!Number.isFinite(oldest)) break;
+          before = oldest;
+        }
+        if (all.length > msgs.length) msgs = all.reverse();
+      } catch {}
+    }
     const recent = msgs.slice(-effectiveContextMsgCount);
     if (recent.length === 0) return null;
     const contextText = recent.map((m: any) => {
       const content = typeof m.content === 'string'
         ? m.content
         : (m.content?.msg || JSON.stringify(m.content));
-      return `${m.is_sent ? 'Tôi' : 'Khách'}: ${content}`;
+      const ts = Number(m.timestamp);
+      const d = Number.isFinite(ts) && ts > 0 ? new Date(ts < 1e12 ? ts * 1000 : ts) : null;
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const time = d ? `[${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}] ` : '';
+      const who = m.is_sent ? 'Tôi' : (m.sender_name || (m.sender_id ? `Khách ${m.sender_id}` : 'Khách'));
+      return `${time}${who}: ${content}`;
     }).join('\n');
     return contextText || null;
   }, [activeAccountId, activeThreadId, effectiveContextMsgCount]);
 
-  const getZaloChatContext = useCallback((): string | null => {
+  const getZaloChatContext = useCallback(async (): Promise<string | null> => {
     if (!aiAutoInjectZaloContext) return null;
     return getRawZaloChatContext();
   }, [aiAutoInjectZaloContext, getRawZaloChatContext]);
@@ -205,7 +238,7 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
 
       // Auto-inject the Zalo chat context if there is an active thread
       const msgsToSend: ChatMsg[] = [];
-      const zaloContext = getZaloChatContext();
+      const zaloContext = await getZaloChatContext();
       if (zaloContext) {
         msgsToSend.push(
           { role: 'user', content: `[Ngữ cảnh hội thoại Zalo hiện tại - ${effectiveContextMsgCount} tin nhắn gần nhất]\n${zaloContext}` },
@@ -251,10 +284,22 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
     window.dispatchEvent(new CustomEvent('ai:insertToChat', { detail: { text } }));
   };
 
+  /** Start a fresh AI conversation: delete the saved Q&A history of this thread and clear the panel */
+  const handleNewChat = useCallback(async () => {
+    if (loading) return;
+    const convId = conversationId;
+    setMessages([]);
+    setConversationId(null);
+    if (convId) {
+      try { await ipc.ai?.deleteConversation({ conversationId: convId }); } catch {}
+    }
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }, [loading, conversationId]);
+
   /** Summarize the conversation: fetch recent messages and send them to the AI to summarize */
   const handleSummarize = useCallback(async () => {
     if (!activeId || loading) return;
-    const zaloContext = getRawZaloChatContext();
+    const zaloContext = await getRawZaloChatContext();
     if (!zaloContext) return;
     setLoading(true);
     const summaryPrompt = `Hãy tóm tắt cuộc hội thoại sau trong 3-5 dòng, nêu rõ: chủ đề chính, yêu cầu của khách, trạng thái hiện tại.\n\n${zaloContext}`;
@@ -375,6 +420,12 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
                 />
               </button>
             </div>
+            <button
+              onClick={handleNewChat}
+              disabled={loading}
+              className="text-[12px] px-2 py-0.5 rounded bg-blue-900/60 text-blue-100 hover:bg-blue-800/50 disabled:opacity-40 transition-colors flex-shrink-0"
+              title={tr('Xóa lịch sử hỏi đáp AI của hội thoại này và bắt đầu cuộc mới')}
+            >{tr('+ Cuộc mới')}</button>
             <button
               onClick={handleSummarize}
               disabled={loading}
