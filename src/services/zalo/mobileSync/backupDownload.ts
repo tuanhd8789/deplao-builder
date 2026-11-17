@@ -21,6 +21,37 @@ export const ZALO_HOST_RE = /(^|\.)(zalo\.me|zaloapp\.com|zdn\.vn|zadn\.vn)$/i;
 
 const MAX_REDIRECTS = 5;
 const IDLE_TIMEOUT_MS = 60 * 1000;
+/**
+ * The phone uploads the backup to `trans-bin.zaloapp.com` AFTER sending `syncmsg_info`, so right after
+ * the event the file is often not there yet (the download returns 404). Poll for up to this long, with
+ * backoff, before giving up.
+ */
+const READY_TIMEOUT_MS = 120 * 1000;
+const RETRY_BASE_MS = 2000;
+const RETRY_MAX_MS = 15000;
+
+/** Status meaning "the file is not on the server yet / a transient error" → worth waiting and retrying. */
+function isNotReady(status: number): boolean {
+    return status === 404 || status === 408 || status === 425 || status === 429 || (status >= 500 && status < 600);
+}
+
+/** Status where dropping the session cookie might help (the cookie/session was rejected). */
+function isCookieRelated(status: number): boolean {
+    return status === 400 || status === 401 || status === 403;
+}
+
+/** Wait `ms`, but reject early with DownloadAbortedError if the sync is cancelled meanwhile. */
+function sleep(ms: number, shouldAbort?: () => boolean): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const step = 250;
+        let waited = 0;
+        const timer = setInterval(() => {
+            if (shouldAbort?.()) { clearInterval(timer); reject(new DownloadAbortedError()); return; }
+            waited += step;
+            if (waited >= ms) { clearInterval(timer); resolve(); }
+        }, step);
+    });
+}
 
 export class DownloadAbortedError extends Error {
     constructor() {
@@ -123,6 +154,36 @@ function serverMessage(snippet: string): string {
     return '';
 }
 
+interface RoundFailure { status: number; detail: string; }
+
+/**
+ * One download attempt. Tries with the session cookie first (the request Zalo PC makes); only when that
+ * fails with a cookie/session status (400/401/403) does it retry once WITHOUT the cookie. Returns the
+ * saved result on success, or the PRIMARY (with-cookie) failure — so the reported status reflects the
+ * real request, not the secondary no-cookie fallback.
+ */
+async function attemptDownloadRound(url: URL, where: string, opts: BackupDownloadOptions): Promise<{ bytes: number } | RoundFailure> {
+    const zaloHost = ZALO_HOST_RE.test(url.hostname);
+    const cookieChoices = zaloHost && opts.sessionCookie ? [opts.sessionCookie, ''] : [''];
+    let primary: RoundFailure | null = null;
+    for (let i = 0; i < cookieChoices.length; i++) {
+        const cookie = cookieChoices[i];
+        if (opts.shouldAbort?.()) throw new DownloadAbortedError();
+        const res = await get(url, zaloDownloadHeaders(opts.userAgent, cookie), opts.agent, MAX_REDIRECTS);
+        const status = res.statusCode || 0;
+        if (status >= 200 && status < 300) return saveResponse(res, opts);
+
+        const detail = await readSnippet(res);
+        opts.log?.(`tải ${where} (${cookie ? 'cookie phiên' : 'không cookie'}) → HTTP ${status} `
+            + `${res.headers['content-type'] || ''} ${detail.slice(0, 300)}`);
+        if (i === 0) primary = { status, detail };
+        // Only the cookie attempt (i === 0) can be retried without the cookie, and only when the status
+        // looks cookie-related. A 404 (file not on the server yet) is not helped by dropping the cookie.
+        if (i > 0 || !isCookieRelated(status)) break;
+    }
+    return primary ?? { status: 0, detail: '' };
+}
+
 export async function downloadBackupFile(opts: BackupDownloadOptions): Promise<{ bytes: number }> {
     let url: URL;
     try {
@@ -133,26 +194,29 @@ export async function downloadBackupFile(opts: BackupDownloadOptions): Promise<{
     if (url.protocol !== 'https:') throw new Error(tr('Đường dẫn tải bản sao lưu không hợp lệ'));
 
     const zaloHost = ZALO_HOST_RE.test(url.hostname);
-    const cookies = zaloHost && opts.sessionCookie ? [opts.sessionCookie, ''] : [''];
     const where = `${url.host}${url.pathname}`;
     if (!zaloHost) opts.log?.(`host tải không thuộc Zalo (${url.host}) → không gửi cookie phiên`);
 
-    let lastStatus = 0;
-    let lastDetail = '';
-    for (const cookie of cookies) {
+    const deadline = Date.now() + READY_TIMEOUT_MS;
+    let backoff = RETRY_BASE_MS;
+    let last: RoundFailure = { status: 0, detail: '' };
+    for (;;) {
         if (opts.shouldAbort?.()) throw new DownloadAbortedError();
-        const res = await get(url, zaloDownloadHeaders(opts.userAgent, cookie), opts.agent, MAX_REDIRECTS);
-        const status = res.statusCode || 0;
-        if (status >= 200 && status < 300) return saveResponse(res, opts);
-
-        lastStatus = status;
-        lastDetail = await readSnippet(res);
-        opts.log?.(`tải ${where} (${cookie ? 'cookie phiên' : 'không cookie'}) → HTTP ${status} `
-            + `${res.headers['content-type'] || ''} ${lastDetail.slice(0, 300)}`);
-        // Only try another way for 4xx errors (cookie/session); for 5xx/others, stop right away.
-        if (status < 400 || status >= 500) break;
+        const result = await attemptDownloadRound(url, where, opts);
+        if ('bytes' in result) return result;
+        last = result;
+        // The backup may still be uploading from the phone → wait and retry while there is time left.
+        if (isNotReady(last.status) && deadline - Date.now() > backoff) {
+            opts.log?.(`bản sao lưu chưa sẵn trên máy chủ (HTTP ${last.status}), đợi ${Math.round(backoff / 1000)}s rồi thử lại...`);
+            await sleep(backoff, opts.shouldAbort);
+            backoff = Math.min(Math.round(backoff * 1.7), RETRY_MAX_MS);
+            continue;
+        }
+        break;
     }
-    throw new Error(tr('Tải bản sao lưu thất bại (HTTP {{lastStatus}}{{v1}})', { lastStatus, v1: serverMessage(lastDetail) }));
+    const note = isNotReady(last.status) ? tr(' — máy chủ vẫn chưa có bản sao lưu sau khi chờ; thử lại hoặc chọn khoảng thời gian nhỏ hơn') : '';
+    throw new Error(tr('Tải bản sao lưu thất bại (HTTP {{lastStatus}}{{v1}}{{v2}})',
+        { lastStatus: last.status, v1: serverMessage(last.detail), v2: note }));
 }
 
 async function saveResponse(res: http.IncomingMessage, opts: BackupDownloadOptions): Promise<{ bytes: number }> {
