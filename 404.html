@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Deplao</title>
+    <script>
+      // Deplao đã chuyển về https://deplaoapp.com: mọi đường dẫn cũ dưới /deplao-builder
+      // chuyển thẳng sang đúng trang tương ứng, giữ nguyên query và hash.
+      (function (l) {
+        var base = '/deplao-builder';
+        var path = l.pathname.indexOf(base) === 0 ? l.pathname.slice(base.length) : l.pathname;
+        if (path.charAt(0) !== '/') path = '/' + path;
+        l.replace('https://deplaoapp.com' + path + l.search + l.hash);
+      })(window.location);
+    </script>
+    <noscript><meta http-equiv="refresh" content="0; url=https://deplaoapp.com/" /></noscript>
+  </head>
+  <body></body>
+</html>
