@@ -15,6 +15,7 @@ import * as fs from 'fs';
 import Logger from '../../../utils/Logger';
 import DatabaseService from '../../database/DatabaseService';
 import EventBroadcaster from '../../event/EventBroadcaster';
+import AutoDownloadPolicyService from '../../file/AutoDownloadPolicyService';
 import FileStorageService from '../../file/FileStorageService';
 import { writeMediaFile } from '../../file/writeMediaFile';
 import { shouldFetchAvatar, markAvatarFetched, markAvatarSuccess, resetAvatarCache } from '../../../utils/telegram/avatarFetchCache';
@@ -303,10 +304,11 @@ async function handleInboundMessage(account: BotAccount, message: any): Promise<
   // Save to DB
   await saveMessage(tgMsg, account.botToken);
 
-  // Download media (background, non-blocking)
+  // Download media (background, non-blocking) unless disabled by auto-download policy (stickers still display)
   // For photos, use the largest size (last element in array)
   const downloadAtt = msgType === 'photo' ? attachments[attachments.length - 1] : attachments[0];
-  if (downloadAtt?.file_id) {
+  const botAutoDownload = msgType === 'sticker' || AutoDownloadPolicyService.getInstance().shouldAutoDownload(account.accountId, chatId);
+  if (downloadAtt?.file_id && botAutoDownload) {
     const fileId = downloadAtt.file_id;
     const fileName = downloadAtt.file_name || `${msgType}_${messageId}`;
     downloadBotMedia(account.botToken, fileId, fileName, msgType, account.accountId, messageId, chatId).catch(err => {
@@ -1036,7 +1038,7 @@ async function recordSentBotPhoto(accountId: string, chatId: string, bot: BotAcc
       } catch {}
 
       // Download photo AFTER event is emitted (so message is in store when localPath arrives)
-      if (photoAttachments.length > 0) {
+      if (photoAttachments.length > 0 && AutoDownloadPolicyService.getInstance().shouldAutoDownload(accountId, chatId)) {
         const largestPhoto = photoAttachments[photoAttachments.length - 1];
         downloadBotMedia(bot.botToken, largestPhoto.file_id, `photo_${msgId}.jpg`, 'photo', accountId, msgId, chatId).catch(() => {});
       }
@@ -2186,4 +2188,63 @@ export async function setChatDescription(accountId: string, chatId: string, desc
   } catch (err: any) {
     return { success: false, error: err.response?.data?.description || err.message };
   }
+}
+
+/**
+ * Download a Telegram Bot message attachment on demand (when auto-download was disabled).
+ */
+export async function downloadBotMessageMediaOnDemand(
+  accountId: string,
+  threadId: string,
+  messageId: string,
+): Promise<{ success: boolean; localPath?: string; localPaths?: Record<string, string>; error?: string }> {
+  const db = DatabaseService.getInstance();
+  if (!db) return { success: false, error: 'Database unavailable' };
+
+  const bot = registeredAccounts.get(accountId);
+  const botToken = bot?.botToken || (() => {
+    const acc = db.getAccounts().find((a) => a.zalo_id === accountId && isTelegramBotToken(a.cookies));
+    return acc?.cookies || '';
+  })();
+  if (!botToken) return { success: false, error: tr('Bot Telegram chưa sẵn sàng hoặc thiếu token') };
+
+  const row: any = db.getMessageById(accountId, String(messageId), threadId || undefined);
+  if (!row) return { success: false, error: tr('Không tìm thấy tin nhắn') };
+
+  const resolvedThreadId = String(row.thread_id || threadId || '');
+  const msgType = String(row.msg_type || 'file');
+
+  try {
+    const existingLp = typeof row.local_paths === 'string'
+      ? JSON.parse(row.local_paths || '{}')
+      : (row.local_paths || {});
+    const existingMain = existingLp.main || existingLp.file || existingLp.video || existingLp.voice || '';
+    if (existingMain && fs.existsSync(FileStorageService.resolveAbsolutePath(existingMain))) {
+      return { success: true, localPath: existingMain, localPaths: existingLp };
+    }
+  } catch {}
+
+  let attachments: any[] = [];
+  try {
+    const parsed = typeof row.attachments === 'string' ? JSON.parse(row.attachments || '[]') : row.attachments;
+    if (Array.isArray(parsed)) attachments = parsed;
+  } catch {}
+
+  const targetAtt = msgType === 'photo' ? attachments[attachments.length - 1] : attachments[0];
+  const fileId = String(targetAtt?.file_id || '');
+  if (!fileId) return { success: false, error: tr('Tin nhắn không có file_id Telegram Bot để tải') };
+
+  const fileName = String(targetAtt?.file_name || `${msgType}_${messageId}`);
+  await downloadBotMedia(botToken, fileId, fileName, msgType, accountId, String(messageId), resolvedThreadId);
+
+  const updated: any = db.getMessageById(accountId, String(messageId), resolvedThreadId || undefined);
+  let localPaths: Record<string, string> = {};
+  try {
+    localPaths = typeof updated?.local_paths === 'string'
+      ? JSON.parse(updated.local_paths || '{}')
+      : (updated?.local_paths || {});
+  } catch {}
+  const mainPath = localPaths.main || localPaths.file || localPaths.video || localPaths.voice || '';
+  if (!mainPath) return { success: false, error: tr('Không tải được file từ Telegram Bot') };
+  return { success: true, localPath: mainPath, localPaths };
 }

@@ -11,6 +11,7 @@ import PhoneDisplay from '../../common/inputs/PhoneDisplay';
 import { CreateGroupModal } from '../groups/GroupModals';
 import GroupInfoPanel from '../groups/GroupInfoPanel';
 import MediaSection, { MediaDetailPanel, MediaTab } from './MediaSection';
+import ConversationAutoDownloadSection from './ConversationAutoDownloadSection';
 import { UserActionSection } from './ConversationActions';
 import { extractUserProfile } from '../../../../utils/zalo/profileUtils';
 import { fetchAllAliases } from '@/lib/zalo/zaloAliasUtils';
@@ -814,6 +815,13 @@ function UserConversationInfo() {
       {zaloDirect && activeAccountId && activeThreadId && (
         <div className="border-b border-border">
           <ZaloAutoDeleteSection accountId={activeAccountId} threadId={activeThreadId} isGroup={false} bordered={false} />
+        </div>
+      )}
+
+      {/* Per-conversation attachment auto-download override */}
+      {activeAccountId && activeThreadId && (
+        <div className="border-b border-border">
+          <ConversationAutoDownloadSection accountId={activeAccountId} threadId={activeThreadId} bordered={false} />
         </div>
       )}
 

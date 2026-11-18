@@ -641,6 +641,9 @@ export function registerZaloIpc() {
                 auth = resolveAuthFromConnection(auth, zaloId);
                 const service = await getService(typeof auth === 'string' ? auth : JSON.stringify(auth), false);
                 const result = await service.getLabels();
+                if (zaloId && Array.isArray(result?.labelData)) {
+                    try { DatabaseService.getInstance().saveZaloLabelsCache(zaloId, result.labelData); } catch {}
+                }
                 Logger.info(`[zaloIpc] zalo:getLabels ✅ got ${result?.labelData?.length ?? 0} labels`);
                 return { success: true, response: result };
             } catch (error: any) {
@@ -675,6 +678,9 @@ export function registerZaloIpc() {
             auth = resolveAuthFromConnection(auth, zaloId);
             const service = await getService(typeof auth === 'string' ? auth : JSON.stringify(auth), isReconnection);
             const result = await service.updateLabels(labelData, version);
+            if (zaloId && Array.isArray(labelData)) {
+                try { DatabaseService.getInstance().saveZaloLabelsCache(zaloId, labelData); } catch {}
+            }
 
             // Centralized workflow label event emission
             if (Array.isArray(labelDiffs) && labelDiffs.length > 0 && zaloId) {

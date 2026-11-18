@@ -14,6 +14,7 @@ import { showConfirm } from '../../common/ConfirmDialog';
 import { extractApiError } from '@/lib/app/apiError';
 import GroupAvatar from '../../common/avatars/GroupAvatar';
 import MediaSection, { MediaDetailPanel, MediaTab } from '../info/MediaSection';
+import ConversationAutoDownloadSection from '../info/ConversationAutoDownloadSection';
 import { GroupActionSection } from '../info/ConversationActions';
 import { syncZaloGroups, MemberPlaceholder } from '@/lib/zalo/zaloGroupUtils';
 import { getCapability, channelSupports, type Channel, type ChannelCapability } from '../../../../configs/channels/channelConfig';
@@ -980,6 +981,13 @@ export default function GroupInfoPanel() {
           <polyline points="9 18 15 12 9 6"/>
         </svg>
       </button>
+      )}
+
+      {/* Per-group attachment auto-download override */}
+      {activeAccountId && activeThreadId && (
+        <div className="border-b border-border">
+          <ConversationAutoDownloadSection accountId={activeAccountId} threadId={activeThreadId} bordered={false} />
+        </div>
       )}
 
       {/* Media tabs */}

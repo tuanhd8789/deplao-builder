@@ -43,6 +43,7 @@ import EventBroadcaster from '../event/EventBroadcaster';
 import { messageTimestampById, recordPeerReceipt } from '../receipts/peerReceipts';
 import { mediaProgressReporter } from '../media/mediaProgress';
 import DatabaseService, { type FbSaveOutcome } from '../database/DatabaseService';
+import AutoDownloadPolicyService from '../file/AutoDownloadPolicyService';
 import FileStorageService from '../file/FileStorageService';
 import { createProxyAgent } from '../../utils/connection/ProxyHelper';
 import { secureGet } from '../secure/SecureSettingsService';
@@ -167,7 +168,7 @@ export class FacebookService {
   }
 
   /** Get real Facebook UID for broadcasts (cached) */
-  private getFacebookId(): string {
+  public getFacebookId(): string {
     if (!this._facebookId) {
       try {
         const fbAcc = DatabaseService.getInstance().getFBAccount(this.accountId);
@@ -810,11 +811,19 @@ export class FacebookService {
       const hasDownloadableUrl = msg.attachments?.url
         ? !msg.attachments.directPath && !isLinkType(msg.attachments)
         : msg.allAttachments?.some(a => a.url && !a.directPath && !isLinkType(a)) ?? false;
-      if (hasDownloadableUrl) {
+      const fbAccountKey = this.getFacebookId() || this.accountId;
+      const fbAutoDownload = AutoDownloadPolicyService.getInstance().shouldAutoDownload(
+        fbAccountKey,
+        threadId,
+        this.accountId,
+      );
+      if (hasDownloadableUrl && fbAutoDownload) {
         Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] Triggering downloadNonE2EEAttachments: msgId=${msg.messageID} threadId=${threadId} primaryUrl=${(msg.attachments?.url || '').slice(0,60)}...`);
         this.downloadNonE2EEAttachments(msg, threadId).catch(err =>
           Logger.warn(`[FacebookService:${this.accountId}] downloadNonE2EEAttachments error: ${err.message}`)
         );
+      } else if (hasDownloadableUrl) {
+        Logger.log(`[FacebookService:${this.accountId}] Auto-download disabled by policy for threadId=${threadId}`);
       } else {
         Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] hasDownloadableUrl=false: id=${!!msg.attachments?.id} id!==0=${msg.attachments?.id !== 0} url=${!!msg.attachments?.url} directPath=${!!msg.attachments?.directPath}`);
       }
@@ -1862,9 +1871,10 @@ export class FacebookService {
     // → local_paths gets lost → the video can never play.
     await this.handleIncomingMessage(msg);
 
-    // Auto-download E2EE media (image/video/audio/file) sau khi save message
+    // Auto-download E2EE media (image/video/audio/file) sau khi save message (unless disabled by policy)
     const e2eeAttachments = data.attachments as any[] | undefined;
-    if (e2eeAttachments?.length && msg.messageID) {
+    const e2eeAccountKey = this.getFacebookId() || this.accountId;
+    if (e2eeAttachments?.length && msg.messageID && AutoDownloadPolicyService.getInstance().shouldAutoDownload(e2eeAccountKey, threadId, this.accountId)) {
       // ⚠️ MUST await to catch download errors, especially for video.
       // Not fire-and-forget - if the bridge does not support video download,
       // it has to be logged to debug.
@@ -1997,15 +2007,16 @@ export class FacebookService {
    * Downloads and decrypts E2EE media attachments (image/video/audio/file) from the Go bridge.
    * Saves the decrypted file to local storage and updates the DB.
    */
-  private async downloadE2EEAttachments(attachments: any[], messageId: string, threadId: string): Promise<void> {
+  private async downloadE2EEAttachments(attachments: any[], messageId: string, threadId: string): Promise<Record<string, string>> {
+    const savedPaths: Record<string, string> = {};
     if (!this.e2eeBridge?.isAlive()) {
-      return;
+      return savedPaths;
     }
 
     for (let i = 0; i < attachments.length; i++) {
       const att = attachments[i];
       if (!att.directPath || !att.mediaKey) {
-        if (att.type === 'sticker') {
+        if (att.type === 'sticker' || att.attachmentType === 'sticker') {
           Logger.warn(`[FacebookService:${this.accountId}] [E2EE] Sticker missing directPath/mediaKey - bridge không cung cấp dữ liệu download cho sticker, cần fix Go bridge (mautrix-meta) để extract sticker attachment fields`);
         }
         continue;
@@ -2017,7 +2028,7 @@ export class FacebookService {
           mediaKey: att.mediaKey,
           mediaSha256: att.mediaSha256 || '',
           mediaEncSha256: att.mediaEncSha256 || '',
-          mediaType: att.type || 'image',
+          mediaType: att.type || att.attachmentType || 'image',
           mimeType: att.mimeType || '',
           fileSize: att.fileSize || 0,
         });
@@ -2036,10 +2047,12 @@ export class FacebookService {
           const relativePath = FileStorageService.toRelativePath(localPath);
           const fbId = this.getFacebookId() || this.accountId;
 
+          const patch: Record<string, string> = i === 0 ? { main: relativePath } : { [`att_${i}`]: relativePath };
+          Object.assign(savedPaths, patch);
           DatabaseService.getInstance().updateLocalPaths(
             fbId,
             messageId,
-            { main: relativePath },
+            patch,
           );
 
           // Notify UI to re-render with local path
@@ -2047,20 +2060,21 @@ export class FacebookService {
             zaloId: fbId,
             msgId: messageId,
             threadId,
-            localPaths: { main: relativePath },
+            localPaths: patch,
           });
 
           Logger.log(`[FacebookService:${this.accountId}] E2EE media saved: ${relativePath}`);
         } else {
-          Logger.warn(`[FacebookService:${this.accountId}] E2EE download returned no data - mediaType=${att.type || 'image'} mimeType=${att.mimeType || ''} size=${att.fileSize || 0}. Go bridge may not support downloading this media type.`);
+          Logger.warn(`[FacebookService:${this.accountId}] E2EE download returned no data - mediaType=${att.type || att.attachmentType || 'image'} mimeType=${att.mimeType || ''} size=${att.fileSize || 0}. Go bridge may not support downloading this media type.`);
         }
       } catch (err: any) {
         if (/too large|exceed/i.test(err.message)) {
-          metricInc('fb_e2ee_media_rejected_too_large', this.accountId, { mediaType: att.type });
+          metricInc('fb_e2ee_media_rejected_too_large', this.accountId, { mediaType: att.type || att.attachmentType });
         }
         Logger.warn(`[FacebookService:${this.accountId}] E2EE download failed: ${err.message}`);
       }
     }
+    return savedPaths;
   }
 
   /**
@@ -2119,38 +2133,42 @@ export class FacebookService {
    * Download non-E2EE image/file attachments to local storage (same as Zalo pattern).
    * FB CDN URLs expire, so we download immediately on receive while the URL is fresh.
    */
-  private async downloadNonE2EEAttachments(msg: FBMQTTMessage, threadId: string): Promise<void> {
+  private async downloadAttachmentList(
+    attachments: any[],
+    messageId: string,
+    threadId: string,
+  ): Promise<Record<string, string>> {
     const fbId = this.getFacebookId() || this.accountId;
     const cookies = this.dataFB?.cookieFacebook;
     const localPaths: Record<string, string> = {};
-    const attachments = msg.allAttachments?.length ? msg.allAttachments : [msg.attachments];
     // Video downloading: the bubble shows a progress ring + "x / y MB", report done AFTER the event:localPath has been sent
-    const videoProgress = mediaProgressReporter(fbId, threadId, msg.messageID);
+    const videoProgress = mediaProgressReporter(fbId, threadId, messageId);
     let videoDownloading = false;
 
-    Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] downloadNonE2EEAttachments: msgId=${msg.messageID} attachments=${attachments.length} threadId=${threadId}`);
+    Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] downloadAttachmentList: msgId=${messageId} attachments=${attachments.length} threadId=${threadId}`);
 
     for (let i = 0; i < attachments.length; i++) {
       const att = attachments[i];
+      if (!att) continue;
       Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] att[${i}]: url=${(att.url || '').slice(0,80)}... directPath=${!!att.directPath} attachmentType=${att.attachmentType || '?'}`);
       if (!att.url || att.directPath) {
         Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] att[${i}]: SKIP - no URL or has directPath`);
         continue;
       }
       // Link type attachments (URL shares) don't need local download
-      if (att.attachmentType === 'link') {
-        Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] att[${i}]: SKIP - type=link, no download needed`);
+      if (att.attachmentType === 'link' || att.attachmentType === 'template') {
+        Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] att[${i}]: SKIP - type=${att.attachmentType}, no download needed`);
         continue;
       }
 
       try {
         const url = String(att.url);
         const ext = (() => { try { return path.extname(new URL(url).pathname) || '.bin'; } catch { return '.bin'; } })();
-        const filename = `fb_${msg.messageID.slice(-8)}_${Date.now()}${ext}`;
+        const filename = `fb_${messageId.slice(-8)}_${Date.now()}_${i}${ext}`;
         Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] att[${i}]: url=${url.slice(0,100)}... ext=${ext} filename=${filename}`);
 
         // Use the right method for the file type - audio / file cannot use downloadImage
-        const attType = att.attachmentType || '';
+        const attType = att.attachmentType || att.type || '';
         let localPath: string;
         if (attType === 'image' || attType === 'sticker') {
           Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] att[${i}]: calling downloadImage`);
@@ -2185,10 +2203,10 @@ export class FacebookService {
 
     if (Object.keys(localPaths).length > 0) {
       Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] Broadcasting event:localPath with ${Object.keys(localPaths).length} paths`);
-      DatabaseService.getInstance().updateLocalPaths(fbId, msg.messageID, localPaths);
+      DatabaseService.getInstance().updateLocalPaths(fbId, messageId, localPaths);
       EventBroadcaster.emit('event:localPath', {
         zaloId: fbId,
-        msgId: msg.messageID,
+        msgId: messageId,
         threadId,
         localPaths,
       });
@@ -2197,6 +2215,47 @@ export class FacebookService {
       Logger.log(`[FacebookService:${this.accountId}] [DEBUG_DOWNLOAD] No local paths to broadcast`);
       if (videoDownloading) videoProgress.failed();
     }
+    return localPaths;
+  }
+
+  private async downloadNonE2EEAttachments(msg: FBMQTTMessage, threadId: string): Promise<void> {
+    const attachments = msg.allAttachments?.length ? msg.allAttachments : [msg.attachments];
+    await this.downloadAttachmentList(attachments, msg.messageID, threadId);
+  }
+
+  /**
+   * Manual on-demand attachment download when auto-download was disabled.
+   * Supports both encrypted E2EE attachments and regular CDN attachments.
+   */
+  public async downloadMessageAttachmentsOnDemand(
+    messageId: string,
+    threadId?: string,
+  ): Promise<Record<string, string>> {
+    const db = DatabaseService.getInstance();
+    const fbId = this.getFacebookId() || this.accountId;
+    const row: any = db.getMessageById(fbId, String(messageId), threadId)
+      || db.getMessageById(this.accountId, String(messageId), threadId);
+    if (!row) return {};
+
+    const resolvedThreadId = String(row.thread_id || threadId || '');
+    let atts: any[] = [];
+    try {
+      const parsed = typeof row.attachments === 'string' ? JSON.parse(row.attachments || '[]') : row.attachments;
+      atts = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+    } catch {}
+    if (!atts.length) return {};
+
+    const e2eeAtts = atts.filter((a) => a?.directPath && a?.mediaKey);
+    const nonE2eeAtts = atts.filter((a) => a?.url && !a?.directPath);
+
+    const merged: Record<string, string> = {};
+    if (e2eeAtts.length > 0) {
+      Object.assign(merged, await this.downloadE2EEAttachments(e2eeAtts, String(messageId), resolvedThreadId));
+    }
+    if (nonE2eeAtts.length > 0) {
+      Object.assign(merged, await this.downloadAttachmentList(nonE2eeAtts, String(messageId), resolvedThreadId));
+    }
+    return merged;
   }
 
   /** Gets the file extension from the MIME type */

@@ -23,6 +23,7 @@ import ZaloHiddenPinSection from './ZaloHiddenPinSection';
 import AccountProxyLine, { type ProxyOption } from './AccountProxyLine';
 import { supportsAccountProxy } from '../../../../shared/accounts/accountProxy';
 import { InAppNotifyAccountLine, MiniAccountAvatar } from '../notifications/InAppNotifySettings';
+import { AutoDownloadAccountLine } from '../storage/AutoDownloadSettings';
 import { SettingLine, SettingsPage } from '../settingsUi';
 import { tr } from '../../../../shared/i18n';
 import { trx } from '@/lib/i18n/trx';
@@ -153,6 +154,7 @@ function AccountCard({ acc, proxies, onDelete }: {
       {/* Account's own settings */}
       <div className="border-t border-border/60 px-1.5 py-1">
         <InAppNotifyAccountLine accountId={acc.zalo_id} />
+        <AutoDownloadAccountLine accountId={acc.zalo_id} />
         {proxies !== undefined && supportsAccountProxy(acc.channel) && (
           <AccountProxyLine account={acc} proxies={proxies} panelId={`${baseId}-proxy`}
             open={open.has('proxy')} onToggle={() => toggle('proxy')} />

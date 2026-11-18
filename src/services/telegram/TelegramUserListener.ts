@@ -22,6 +22,7 @@ import { createResumeTurns } from './messages/telegramResumeTurns';
 import { mergeTelegramPollUpdate, telegramPollAttachment } from './messages/telegramPolls';
 import { onSystemPower } from '../../utils/startup/systemIdle';
 import EventBroadcaster from '../event/EventBroadcaster';
+import AutoDownloadPolicyService from '../file/AutoDownloadPolicyService';
 import FileStorageService from '../file/FileStorageService';
 import { writeMediaFile } from '../file/writeMediaFile';
 import { shouldFetchAvatar, markAvatarFetched, markAvatarSuccess, resetAvatarCache } from '../../utils/telegram/avatarFetchCache';
@@ -1208,6 +1209,9 @@ async function downloadRichMessageMedia(
   threadId: string,
   opts: { mediaIds?: string[]; urgency?: TelegramDownloadUrgency } = {},
 ): Promise<Record<string, string>> {
+  if (opts.urgency !== 'urgent' && !AutoDownloadPolicyService.getInstance().shouldAutoDownload(accountId, threadId)) {
+    return {};
+  }
   const rich = message?.richMessage;
   const db = DatabaseService.getInstance();
   if (!rich || !db) return {};
@@ -5419,6 +5423,13 @@ function downloadMediaForMessage(
   threadId: string,
   opts: Pick<TelegramDownloadOptions, 'urgency' | 'sortKey'> = {},
 ): Promise<string | null> {
+  if (
+    opts.urgency !== 'urgent'
+    && msgType !== 'sticker'
+    && !AutoDownloadPolicyService.getInstance().shouldAutoDownload(accountId, threadId)
+  ) {
+    return Promise.resolve(null);
+  }
   const resourceKey = `media:${threadId}:${messageId}`;
   // Video: report "waiting to download" as soon as it is queued (the account's queue runs one at a time) → the bubble shows 0 / 5.0 MB
   if (PROGRESS_MEDIA_TYPES.has(msgType) && !telegramDownloads.has(accountId, resourceKey)) {
@@ -8533,6 +8544,15 @@ export function repairMessageMedia(
   messageId: string,
   opts: { urgent?: boolean } = {},
 ): Promise<MediaRepairResult> {
+  if (!opts.urgent && !AutoDownloadPolicyService.getInstance().shouldAutoDownload(accountId, chatId)) {
+    const row = DatabaseService.getInstance()?.queryOne<{ msg_type?: string }>(
+      `SELECT msg_type FROM messages WHERE msg_id = ? AND owner_zalo_id = ? AND thread_id = ? AND channel = 'telegram_user' LIMIT 1`,
+      [messageId, accountId, chatId],
+    );
+    if (row?.msg_type !== 'sticker') {
+      return Promise.resolve({ success: false, error: 'AUTO_DOWNLOAD_DISABLED' });
+    }
+  }
   const listener = activeListeners.get(accountId);
   const numericMessageId = Number(messageId);
   const urgency: TelegramDownloadUrgency = opts.urgent ? 'urgent' : 'visible';

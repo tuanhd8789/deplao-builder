@@ -8,6 +8,7 @@ import {useChatStore} from '@/store/chat/chatStore';
 import {useAccountStore} from '@/store/accounts/accountStore';
 import {useAppStore} from '@/store/app/appStore';
 import {useEmployeeStore} from '@/store/employee/employeeStore';
+import {useShouldAutoDownload} from '@/store/media/autoDownloadStore';
 import ipc, { buildZaloAuth } from '@/lib/ipc';
 import { getFileMetadata, getLocalMediaPath, getStatusDisplay, extractAttachments, getTelegramStickerMedia, getTelegramPostMeta } from '@/lib/media/mediaResolver';
 import { isFacebook, isTelegram, isTelegramUser, isNonZalo, isZalo } from '@/lib/channels/channelHelper';
@@ -217,9 +218,11 @@ export function useTelegramMediaRepair(msg: any, shouldAutoRepair: boolean) {
         return null;
     }, [accountId, attachmentsValue, localPathsValue, messageId, msg?.channel, msg?.msg_type, repairKey, threadId]);
 
+    const autoAllowed = useShouldAutoDownload(accountId, threadId);
+
     React.useEffect(() => {
-        if (shouldAutoRepair) void requestRepair('missing_source');
-    }, [requestRepair, shouldAutoRepair]);
+        if (shouldAutoRepair && autoAllowed) void requestRepair('missing_source');
+    }, [requestRepair, shouldAutoRepair, autoAllowed]);
 
     return {repairing, requestRepair, repairedAt};
 }
@@ -260,10 +263,12 @@ export function FileBubble({msg, isSent}: { msg: any; isSent: boolean }) {
     const [opening, setOpening] = React.useState(false);
     const [previewFailed, setPreviewFailed] = React.useState(false);
     const repairAttemptedRef = React.useRef(false);
+    const autoDownloadAllowed = useShouldAutoDownload(msg?.owner_zalo_id, msg?.thread_id);
 
-    // Auto-repair: download the file from Telegram when local_paths is missing
+    // Auto-repair: download the file from Telegram when local_paths is missing (only if auto-download is enabled)
     React.useEffect(() => {
         if (repairAttemptedRef.current) return;
+        if (!autoDownloadAllowed) return;
         if (!isTelegramUser(msg?.channel)) return;
         const lp = typeof msg?.local_paths === 'string' ? (() => { try { return JSON.parse(msg.local_paths); } catch { return {}; } })() : (msg?.local_paths || {});
         if (lp.file || lp.main) return; // file already present
@@ -279,7 +284,7 @@ export function FileBubble({msg, isSent}: { msg: any; isSent: boolean }) {
                 }
             })
             .catch(() => {});
-    }, [msg?.msg_id, msg?.local_paths]);
+    }, [autoDownloadAllowed, msg?.msg_id, msg?.local_paths]);
 
     let fileTitle = '';
     let fileHref = '';
@@ -343,14 +348,50 @@ export function FileBubble({msg, isSent}: { msg: any; isSent: boolean }) {
         if (opening) return;
         setOpening(true);
         try {
+            let targetLocalPath = localFilePath;
+            // On-demand download when auto-download was skipped
+            if (!targetLocalPath && msg?.owner_zalo_id && msg?.msg_id) {
+                const accountId = String(msg.owner_zalo_id);
+                const threadId = msg.thread_id ? String(msg.thread_id) : '';
+                const messageId = String(msg.msg_id);
+                if (isTelegramUser(msg.channel)) {
+                    const rep = await ipc.telegramUser?.repairMessageMedia({
+                        accountId,
+                        chatId: threadId,
+                        messageId,
+                        urgent: true,
+                    });
+                    if (rep?.success && rep.localPaths) {
+                        if (threadId) useChatStore.getState().updateMessageLocalPath(accountId, threadId, messageId, rep.localPaths);
+                        targetLocalPath = rep.localPaths.file || rep.localPaths.main || Object.values(rep.localPaths).find(Boolean) || '';
+                    }
+                } else {
+                    const dl = await ipc.file?.downloadMessageMedia?.({
+                        zaloId: accountId,
+                        msgId: messageId,
+                        threadId: threadId || undefined,
+                        kind: 'file',
+                    });
+                    if (dl?.success) {
+                        const lp = dl.localPaths || (dl.localPath ? { file: dl.localPath } : {});
+                        if (threadId && Object.keys(lp).length > 0) {
+                            useChatStore.getState().updateMessageLocalPath(accountId, threadId, messageId, lp);
+                        }
+                        targetLocalPath = dl.localPath || lp.file || lp.main || Object.values(lp).find(Boolean) || '';
+                    }
+                }
+            }
+
             // Employee machine: download the Boss's saved copy to this machine and open it (before, it opened the Boss's path on this machine → nothing
             // happened). If the file cannot be opened here → open the original link (the browser downloads it); with no link, show an error.
-            const onThisMachine = await fileOnThisMachine(localFilePath, 'file');
+            const onThisMachine = targetLocalPath ? await fileOnThisMachine(targetLocalPath, 'file') : null;
             const opened = onThisMachine ? await ipc.file?.openPath(onThisMachine) : null;
             if (opened?.success) return;
             if (fileHref) ipc.shell?.openExternal(fileHref);
-            else if (localFilePath) {
+            else if (targetLocalPath) {
                 useAppStore.getState().showNotification(tr('Không mở được file{{v1}}', { v1: opened?.error ? `: ${opened.error}` : '' }), 'error');
+            } else {
+                useAppStore.getState().showNotification(tr('Không tải được tệp (link có thể đã hết hạn)'), 'warning');
             }
         } catch {
         } finally {
@@ -408,7 +449,7 @@ export function FileBubble({msg, isSent}: { msg: any; isSent: boolean }) {
 
     const sizeText = formatFileSize(fileSize);
     const hasLocal = !!localFilePath && !employeeView;
-    const canOpen = !!localFilePath || !!fileHref;
+    const canOpen = !!localFilePath || !!fileHref || !!(msg?.owner_zalo_id && msg?.msg_id);
     const {icon, bg, text} = getFileIconAndColor(fileExt);
     // Telegram can send an image as a document. It is still a file (with a name,
     // size and an open button), but Telegram clients show a thumbnail and
@@ -467,14 +508,14 @@ export function FileBubble({msg, isSent}: { msg: any; isSent: boolean }) {
                     <p className="text-xs mt-0.5 flex items-center gap-1 text-muted-foreground">
                         {sizeText && <span>{sizeText}</span>}
                         {sizeText && hasLocal && <span>•</span>}
-                        {opening ? <span>{tr('Đang mở...')}</span>
+                        {opening ? <span>{tr('Đang tải...')}</span>
                             : hasLocal ? <>
                                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                          strokeWidth="2.5">
                                         <polyline points="20 6 9 17 4 12"/>
                                     </svg>
                                     <span>{tr('Đã có trên máy')}</span></>
-                                : (fileHref || localFilePath) ? <span>{tr('Nhấn để tải')}</span>
+                                : (fileHref || localFilePath || !autoDownloadAllowed) ? <span>{tr('Nhấn để tải')}</span>
                                     : (isFacebook(msg.channel) && isSent) ? <span>{getStatusDisplay(msg, true).text}</span>
                                         : <span>{tr('Đang tải về...')}</span>}
                     </p>
@@ -568,6 +609,7 @@ export function MediaBubble({msg, onView, isSent, allContacts, groupMembersList,
     const [loadFailed, setLoadFailed] = React.useState(false);
     const [saving, setSaving] = React.useState(false);
     const [zaloRepairing, setZaloRepairing] = React.useState(false);
+    const [manualDownloading, setManualDownloading] = React.useState(false);
     const zaloRepairingRef = React.useRef(false);
     const repairKey = `${msg?.owner_zalo_id}:${msg?.msg_id}`;
 
@@ -995,24 +1037,54 @@ export function MediaBubble({msg, onView, isSent, allContacts, groupMembersList,
     }
 
     if (!displayUrl) {
-        // Neither remote nor local: show a static placeholder (no animation)
+        // Neither remote nor local (including E2EE FB / Telegram Bot / Telegram User when auto-download is off): allow manual click-to-download
+        const canDownloadManual = !!(msg?.owner_zalo_id && msg?.msg_id);
+        const isBusy = telegramRepair.repairing || zaloRepairing || manualDownloading;
+        const handleManualDownload = async () => {
+            if (!canDownloadManual || isBusy) return;
+            if (isTelegramUser(msg.channel)) {
+                void telegramRepair.requestRepair('manual_retry', true);
+                return;
+            }
+            if (isZalo(msg.channel)) {
+                void requestZaloRepair(true);
+                return;
+            }
+            setManualDownloading(true);
+            try {
+                const accountId = String(msg.owner_zalo_id);
+                const messageId = String(msg.msg_id);
+                const threadId = msg.thread_id ? String(msg.thread_id) : undefined;
+                const dl = await ipc.file?.downloadMessageMedia?.({
+                    zaloId: accountId,
+                    msgId: messageId,
+                    threadId,
+                    kind: 'image',
+                });
+                const lp = dl?.localPaths || (dl?.localPath ? { main: dl.localPath } : null);
+                if (dl?.success && lp && threadId) {
+                    useChatStore.getState().updateMessageLocalPath(accountId, threadId, messageId, lp);
+                }
+            } finally {
+                setManualDownloading(false);
+            }
+        };
         return (
             <button
                 type="button"
-                onClick={() => {
-                    if (isTelegramUser(msg.channel)) void telegramRepair.requestRepair('manual_retry', true);
-                    else if (isZalo(msg.channel)) void requestZaloRepair(true);
-                }}
-                disabled={(!isTelegramUser(msg.channel) && !isZalo(msg.channel)) || telegramRepair.repairing || zaloRepairing}
-                title={isTelegramUser(msg.channel) ? tr('Tải lại ảnh Telegram này') : isZalo(msg.channel) ? tr('Tải lại ảnh Zalo này') : undefined}
-                className="relative flex flex-col gap-1 items-center justify-center max-w-xs w-full h-32 rounded-xl bg-muted/40 text-muted-foreground select-none disabled:cursor-default">
+                onClick={() => { void handleManualDownload(); }}
+                disabled={!canDownloadManual || isBusy}
+                title={canDownloadManual ? tr('Bấm để tải ảnh về máy') : undefined}
+                className="relative flex flex-col gap-1 items-center justify-center max-w-xs w-full h-32 rounded-xl bg-muted/40 text-muted-foreground hover:bg-muted/60 transition-colors select-none disabled:cursor-default">
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-                     className="opacity-30">
+                     className="opacity-40">
                     <rect x="3" y="3" width="18" height="18" rx="2"/>
                     <circle cx="8.5" cy="8.5" r="1.5"/>
                     <polyline points="21 15 16 10 5 21"/>
                 </svg>
-                {(telegramRepair.repairing || zaloRepairing) && <span className="text-[10px] opacity-60">{tr('Đang tải lại...')}</span>}
+                <span className="text-[11px] opacity-75">
+                    {isBusy ? tr('Đang tải ảnh...') : tr('Nhấn để tải ảnh')}
+                </span>
                 <MediaTimeBadge timestamp={mediaTime}/>
             </button>
         );
@@ -1215,7 +1287,8 @@ export function getTelegramVideoMedia(msg: any): { size: number; duration: numbe
 
 export function TelegramVideoPending({msg, onPlay}: { msg: any; onPlay: (downloaded: any) => void }) {
     const {size, duration, width, height, thumb} = getTelegramVideoMedia(msg) || {size: 0, duration: 0, width: 0, height: 0, thumb: ''};
-    const repair = useTelegramMediaRepair(msg, size > 0 && size <= TELEGRAM_VIDEO_AUTO_DOWNLOAD_BYTES);
+    const autoDownloadAllowed = useShouldAutoDownload(msg?.owner_zalo_id, msg?.thread_id);
+    const repair = useTelegramMediaRepair(msg, autoDownloadAllowed && size > 0 && size <= TELEGRAM_VIDEO_AUTO_DOWNLOAD_BYTES);
     // Download in progress (new message auto-downloading / clicked download): progress ring + "2.1 / 5.0 MB" as in Telegram; while downloading, clicking
     // does nothing. Only after the download finishes does the bubble have a playable file (FBVideoThumb), so the player never gets a partial file
     const progress = useMessageMediaProgress(msg);
@@ -1283,6 +1356,7 @@ export function TelegramVideoPending({msg, onPlay}: { msg: any; onPlay: (downloa
 /** VideoBubble - shows a video message with a thumbnail and a play button */
 export function VideoBubble({msg, isSent}: { msg: any; isSent: boolean }) {
     const [saving, setSaving] = React.useState(false);
+    const autoDownloadAllowed = useShouldAutoDownload(msg?.owner_zalo_id, msg?.thread_id);
     // local-first thumbnail; fall back to remote when local is not downloaded yet or failed
     const [thumbSrcMode, setThumbSrcMode] = React.useState<'local' | 'remote'>('local');
 
@@ -1425,7 +1499,9 @@ export function VideoBubble({msg, isSent}: { msg: any; isSent: boolean }) {
                     <span className="text-[11px] text-white font-bold bg-blue-600/70 px-1.5 py-0.5 rounded">HD</span>
                 )}
                 {!videoLocalPath && (
-                    <span className="text-[11px] text-yellow-300 bg-black/50 px-1.5 py-0.5 rounded">{tr('Đang tải...')}</span>
+                    <span className="text-[11px] text-yellow-300 bg-black/50 px-1.5 py-0.5 rounded">
+                        {autoDownloadAllowed ? tr('Đang tải...') : tr('Nhấn để xem')}
+                    </span>
                 )}
             </div>
 
@@ -1846,6 +1922,7 @@ export function SingleImageInGroup({msg, onView, isSent, isSelecting: isSelectin
     const [loadFailed, setLoadFailed] = React.useState(false);
     const [saving, setSaving] = React.useState(false);
     const [checkingExpiry, setCheckingExpiry] = React.useState(false);
+    const [manualDownloading, setManualDownloading] = React.useState(false);
 
     const localPathsStr = typeof msg.local_paths === 'string' ? msg.local_paths : JSON.stringify(msg.local_paths ?? '');
     React.useEffect(() => {
@@ -1967,21 +2044,62 @@ export function SingleImageInGroup({msg, onView, isSent, isSelecting: isSelectin
     }
 
     if (loadFailed || !displayUrl) {
+        const canManualTile = !!(msg?.owner_zalo_id && msg?.msg_id);
+        const busy = telegramRepair.repairing || manualDownloading;
+        const handleTileManualDownload = async () => {
+            if (!canManualTile || busy) return;
+            if (isTelegramUser(msg.channel)) {
+                void telegramRepair.requestRepair('manual_retry', true).then((repaired) => {
+                    if (repaired) setLoadFailed(false);
+                });
+                return;
+            }
+            setManualDownloading(true);
+            try {
+                const accountId = String(msg.owner_zalo_id);
+                const messageId = String(msg.msg_id);
+                const threadId = msg.thread_id ? String(msg.thread_id) : undefined;
+                if (isZalo(msg.channel)) {
+                    const res = await ensureMessageImage(msg, { force: true });
+                    if (res?.success && res.newLocalPath) {
+                        setUseLocal(true);
+                        setLoadFailed(false);
+                    }
+                } else {
+                    const dl = await ipc.file?.downloadMessageMedia?.({
+                        zaloId: accountId,
+                        msgId: messageId,
+                        threadId,
+                        kind: isVideoTile ? 'video' : 'image',
+                    });
+                    const lp = dl?.localPaths || (dl?.localPath ? { main: dl.localPath } : null);
+                    if (dl?.success && lp && threadId) {
+                        useChatStore.getState().updateMessageLocalPath(accountId, threadId, messageId, lp);
+                        setUseLocal(true);
+                        setLoadFailed(false);
+                    }
+                }
+            } finally {
+                setManualDownloading(false);
+            }
+        };
         return (
             <button
                 type="button"
-                onClick={() => void telegramRepair.requestRepair('manual_retry', true)}
-                disabled={!isTelegramUser(msg.channel) || telegramRepair.repairing}
-                title={isTelegramUser(msg.channel) ? tr('Tải lại ảnh Telegram này') : undefined}
-                className={`${tileHeightClass} flex-1 min-w-0 bg-foreground/5 flex flex-col gap-1 items-center justify-center text-muted-foreground select-none disabled:cursor-default`}>
+                onClick={() => { void handleTileManualDownload(); }}
+                disabled={!canManualTile || busy}
+                title={canManualTile ? tr('Nhấn để tải ảnh') : undefined}
+                className={`${tileHeightClass} flex-1 min-w-0 bg-foreground/5 flex flex-col gap-1 items-center justify-center text-muted-foreground hover:bg-foreground/10 transition-colors select-none disabled:cursor-default`}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"
-                     className="opacity-30">
+                     className="opacity-35">
                     <rect x="3" y="3" width="18" height="18" rx="2"/>
                     <circle cx="8.5" cy="8.5" r="1.5"/>
                     <polyline points="21 15 16 10 5 21"/>
                     {loadFailed && <line x1="2" y1="2" x2="22" y2="22"/>}
                 </svg>
-                {telegramRepair.repairing && <span className="text-[10px] opacity-60">{tr('Đang tải lại...')}</span>}
+                <span className="text-[10px] opacity-65">
+                    {busy ? tr('Đang tải lại...') : tr('Nhấn để tải')}
+                </span>
             </button>
         );
     }

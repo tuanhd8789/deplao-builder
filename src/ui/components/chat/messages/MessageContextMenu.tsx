@@ -252,7 +252,7 @@ export default function MessageContextMenu({
     onClose();
     let path = localPath;
     if (!path && isMedia && isZalo(target?.channel)) {
-      const saved = await ensureMessageImage(target);
+      const saved = await ensureMessageImage(target, { force: true });
       if (saved.success && saved.newLocalPath) path = saved.newLocalPath;
     }
     const onThisMachine = await fileOnThisMachine(path, isVideo ? 'video' : isFile ? 'file' : 'image');

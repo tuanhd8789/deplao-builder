@@ -29,6 +29,8 @@ export const EMPLOYEE_PROXY_IPC_CHANNELS: ReadonlySet<string> = new Set([
   'ai:listAssistants', 'ai:getAssistant', 'ai:getDefault', 'ai:saveAssistant', 'ai:deleteAssistant', 'ai:testAssistant',
   'ai:getFiles', 'ai:uploadFile', 'ai:removeFile', 'ai:getAccountAssistant', 'ai:setAccountAssistant',
   'ai:getAccountAssistants', 'ai:getUsageLogs', 'ai:getUsageStats',
+  'ai:chatWithTools', 'ai:executeToolAction', 'ai:getContextFilterOptions', 'ai:getContextSenders', 'ai:queryContextMessages',
+  'ai:createConversation', 'ai:listAllConversations', 'ai:updateConversationMeta', 'ai:updateMessageMeta',
   // CRM (module crm)
   'crm:saveNote', 'crm:deleteNote', 'crm:saveCampaign', 'crm:deleteCampaign', 'crm:cloneCampaign',
   'crm:updateCampaignStatus', 'crm:addCampaignContacts', 'crm:deleteCampaignContacts', 'crm:deleteAllCampaignContacts',
@@ -56,6 +58,8 @@ export const EMPLOYEE_PROXY_IPC_CHANNELS: ReadonlySet<string> = new Set([
   'workflow:save', 'workflow:delete', 'workflow:toggle', 'workflow:clone', 'workflow:cloneAll',
   // Zalo message images Boss has not saved yet → Boss downloads them with the account session (chat module; only the message id, the link is read from the Boss DB)
   'file:ensureMessageImage',
+  // On-demand attachment download across channels when auto-download was skipped
+  'file:downloadMessageMedia',
 ]);
 
 /** Channel with its own handling in executeProxyAction (Boss gets the auth of the assigned account itself). */
@@ -111,7 +115,7 @@ export function proxyChannelModules(channel: string): string[] {
   if (spec?.modules?.length) return [...spec.modules];
   if (ACCOUNT_SETTINGS_PROXY_CHANNELS.has(name)) return ['settings_accounts'];
   if (CATALOG_WRITE_PROXY_CHANNELS.has(name)) return ['crm'];
-  if (name === 'file:ensureMessageImage') return ['chat'];
+  if (name === 'file:ensureMessageImage' || name === 'file:downloadMessageMedia') return ['chat'];
   if (FRIEND_PROXY_CHANNELS.has(name)) return ['friends', 'chat'];
   if (name.startsWith('zalo:') || name.startsWith('fb:') || name.startsWith('telegramUser:')) return ['chat'];
   if (name.startsWith('crm:')) return ['crm'];

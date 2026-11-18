@@ -49,7 +49,7 @@ export function VideoMessageBody({ ctx, msg, telegramPostMeta }: VideoMessageBod
           // Telegram: frame at the real aspect ratio + a blurred cover image while the first frame is captured (matches the not-yet-loaded state)
           const tgVideo = isTelegramUser(msg.channel) ? getTelegramVideoMedia(msg) : null;
           return (
-            <FBVideoThumb videoPath={videoPath} onPlay={() => openVideoPlayer(msg)} dimsMsg={msg}
+            <FBVideoThumb videoPath={videoPath} onPlay={(downloaded) => openVideoPlayer(downloaded || msg)} dimsMsg={msg}
               width={tgVideo?.width || undefined} height={tgVideo?.height || undefined}
               placeholderSrc={tgVideo?.thumb || undefined}
               autoPlayInline={!!tgVideo && tgVideo.size > 0 && tgVideo.size <= TELEGRAM_INLINE_AUTOPLAY_MAX_BYTES}

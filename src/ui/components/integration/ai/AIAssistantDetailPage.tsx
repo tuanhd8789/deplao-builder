@@ -10,8 +10,19 @@ import { useAppStore } from '@/store/app/appStore';
 import {showConfirm} from "@/components/common/ConfirmDialog";
 import { Spinner } from '@/components/common/PageLoading';
 import PromptWizardModal from './PromptWizardModal';
+import AIMarkdownRenderer from './AIMarkdownRenderer';
+import { ExecutedToolsBadge, PendingActionList } from './AIToolCards';
 import { parseStructuredResponse } from '../../../../shared/ai/aiUtils';
 import { AI_MODEL_OPTIONS, DEFAULT_AI_MODELS, normalizeAIModel } from '../../../../shared/ai/aiModelCatalog';
+import {
+  DEFAULT_AI_TOOL_PERMISSIONS,
+  normalizeAIToolPermissions,
+  type AIToolAccessLevel,
+  type AIToolModule,
+  type AIToolPermissions,
+  type AIExecutedToolTrace,
+  type AIPendingToolAction,
+} from '../../../../models/ai/ai';
 import { AlertIcon, BookIcon, BotIcon, ChartIcon, ChatIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon, ClipboardListIcon, EditIcon, FileTextIcon, GlobeIcon, HardDriveIcon, KeyIcon, LightningIcon, LinkIcon, PackageIcon, PaperclipIcon, PinIcon, RefreshIcon, SearchIcon, SettingsIcon, ShoppingCartIcon, ShuffleIcon, SparklesIcon, SunIcon, TargetIcon, TrashIcon } from '@/components/common/icons';
 import { tr, appLocale } from '../../../../shared/i18n';
 import { trx } from '@/lib/i18n/trx';
@@ -142,10 +153,77 @@ interface ChatMsg {
   role: 'user' | 'assistant';
   content: string;
   segments?: Array<{ type: 'text' | 'image'; content: any }>; // Parsed structured JSON segments
+  executedTools?: AIExecutedToolTrace[];
+  pendingActions?: AIPendingToolAction[];
   promptTokens?: number;
   completionTokens?: number;
   totalTokens?: number;
 }
+
+const AI_PERMISSION_MODULES: Array<{
+  key: AIToolModule;
+  label: string;
+  desc: string;
+  readOnly?: boolean;
+}> = [
+  {
+    key: 'hrm',
+    label: tr('Phòng ban, Chức vụ & Nhân sự (HRM)'),
+    desc: tr('Xem cơ cấu tổ chức, chấm công, nghỉ phép; tạo/cập nhật phòng ban, chức vụ, hồ sơ nhân sự'),
+  },
+  {
+    key: 'tasks',
+    label: tr('Dự án & Quản lý công việc (ERP Tasks)'),
+    desc: tr('Xem dự án & task; tạo/cập nhật dự án, giao việc, đặt hạn, checklist, bình luận'),
+  },
+  {
+    key: 'crm',
+    label: tr('Khách hàng CRM, Nhãn & Chiến dịch'),
+    desc: tr('Tra cứu hồ sơ khách, nhãn/tag, chiến dịch; sửa thông tin, thêm ghi chú CRM, tạo nhãn & chiến dịch nháp'),
+  },
+  {
+    key: 'calendar_notes',
+    label: tr('Lịch hẹn & Ghi chú tài liệu'),
+    desc: tr('Xem lịch họp và ghi chú ERP; đặt/dời lịch hẹn, tạo/sửa thư mục và ghi chú'),
+  },
+  {
+    key: 'messaging',
+    label: tr('Hội thoại & Tin nhắn đa kênh'),
+    desc: tr('Đọc/lọc tin nhắn Zalo, Facebook, Telegram; gắn nhãn hội thoại và soạn đề xuất gửi tin'),
+  },
+  {
+    key: 'reports',
+    label: tr('Tóm tắt & Báo cáo công việc'),
+    desc: tr('Tổng hợp tiến độ công việc, quá hạn, hiệu suất nhân sự/phòng ban và thống kê CRM'),
+    readOnly: true,
+  },
+  {
+    key: 'pos',
+    label: tr('Tra cứu POS / Đơn hàng & Sản phẩm'),
+    desc: tr('Tra cứu sản phẩm, tồn kho, đơn hàng từ phần mềm POS kết nối'),
+    readOnly: true,
+  },
+];
+
+const ALL_OFF_PERMS: AIToolPermissions = {
+  messaging: 'off',
+  crm: 'off',
+  hrm: 'off',
+  tasks: 'off',
+  calendar_notes: 'off',
+  reports: 'off',
+  pos: 'off',
+};
+
+const READ_ONLY_ALL_PERMS: AIToolPermissions = {
+  messaging: 'read',
+  crm: 'read',
+  hrm: 'read',
+  tasks: 'read',
+  calendar_notes: 'read',
+  reports: 'read',
+  pos: 'read',
+};
 
 interface UsageStat {
   day: string;
@@ -221,6 +299,7 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
   const [contextMessageCount, setContextMessageCount] = useState(30);
   const [enabled, setEnabled] = useState(true);
   const [isDefault, setIsDefault] = useState(false);
+  const [toolPermissions, setToolPermissions] = useState<AIToolPermissions>(() => ({ ...DEFAULT_AI_TOOL_PERMISSIONS }));
 
   // Files
   const [files, setFiles] = useState<AIFile[]>([]);
@@ -238,6 +317,7 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
 
   // Chat preview state
   const [showChatPanel, setShowChatPanel] = useState(true);
+  const [previewWithTools, setPreviewWithTools] = useState(true);
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -304,6 +384,7 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
           setContextMessageCount(a.contextMessageCount || 30);
           setEnabled(a.enabled !== false);
           setIsDefault(!!a.isDefault);
+          setToolPermissions(normalizeAIToolPermissions(a.toolPermissions ?? a.toolPermissionsJson));
         }
       } catch {}
 
@@ -370,6 +451,8 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
         contextMessageCount,
         enabled,
         isDefault,
+        toolPermissions,
+        toolPermissionsJson: JSON.stringify(toolPermissions),
       };
       console.log('[AIAssistantDetailPage] saving payload:', {
         id: payload.id,
@@ -541,6 +624,16 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
 
   // ─── Chat preview handlers ──────────────────────────────────────────────
 
+  const updateChatPendingAction = useCallback((msgIndex: number, updated: AIPendingToolAction) => {
+    setChatMessages(prev => prev.map((m, idx) => {
+      if (idx !== msgIndex || !m.pendingActions) return m;
+      return {
+        ...m,
+        pendingActions: m.pendingActions.map(a => a.id === updated.id ? updated : a),
+      };
+    }));
+  }, []);
+
   const handleChatSend = useCallback(async () => {
     const text = chatInput.trim();
     if (!text || !savedId || chatLoading) return;
@@ -552,26 +645,49 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
 
     try {
       const allMsgs = [...chatMessages, userMsg];
-      const res = await ipc.ai?.chat(savedId, allMsgs, true);
-      if (res?.success && res.result) {
-        const segments = parseStructuredResponse(res.result);
-        setChatMessages(prev => [...prev, {
-          role: 'assistant',
-          content: res.result!,
-          segments: segments || undefined,
-          promptTokens: (res as any).promptTokens || 0,
-          completionTokens: (res as any).completionTokens || 0,
-          totalTokens: (res as any).totalTokens || 0,
-        }]);
+      if (previewWithTools && ipc.ai?.chatWithTools) {
+        const res = await ipc.ai.chatWithTools({
+          assistantId: savedId,
+          messages: allMsgs.map(m => ({ role: m.role, content: m.content })),
+          enableTools: true,
+        });
+        if (res?.success && (res.result || res.pendingActions?.length)) {
+          const segments = res.result ? parseStructuredResponse(res.result) : null;
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: res.result || '',
+            segments: segments || undefined,
+            executedTools: res.executedTools || [],
+            pendingActions: res.pendingActions || [],
+            promptTokens: res.promptTokens || 0,
+            completionTokens: res.completionTokens || 0,
+            totalTokens: res.totalTokens || 0,
+          }]);
+        } else {
+          setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${res?.error || tr('Không có phản hồi')}` }]);
+        }
       } else {
-        setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${res?.error || tr('Không có phản hồi')}` }]);
+        const res = await ipc.ai?.chat(savedId, allMsgs, true);
+        if (res?.success && res.result) {
+          const segments = parseStructuredResponse(res.result);
+          setChatMessages(prev => [...prev, {
+            role: 'assistant',
+            content: res.result!,
+            segments: segments || undefined,
+            promptTokens: (res as any).promptTokens || 0,
+            completionTokens: (res as any).completionTokens || 0,
+            totalTokens: (res as any).totalTokens || 0,
+          }]);
+        } else {
+          setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${res?.error || tr('Không có phản hồi')}` }]);
+        }
       }
     } catch (e: any) {
       setChatMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e.message}` }]);
     }
     setChatLoading(false);
     setTimeout(() => chatInputRef.current?.focus(), 100);
-  }, [chatInput, savedId, chatLoading, chatMessages]);
+  }, [chatInput, savedId, chatLoading, chatMessages, previewWithTools]);
 
   const handleChatKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -790,6 +906,135 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
                 rows={10}
                 placeholder={tr('VD: Bạn là trợ lý bán hàng chuyên nghiệp...')}
                 className="w-full bg-muted border border-input rounded-lg px-3 py-2 text-sm text-foreground placeholder-subtle-foreground focus:outline-none focus:border-blue-500 resize-y min-h-[80px]"/>
+            </div>
+          </div>
+
+          {/* Tool Permissions & Anti-Delete Policy */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-sm font-semibold text-foreground/80 flex items-center gap-1.5">
+                <svg className="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <path d="M9 12l2 2 4-4"/>
+                </svg>
+                <span>{tr('Phân quyền công cụ & Bảo vệ dữ liệu')}</span>
+              </h2>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
+                {tr('Khóa cứng quyền XÓA')}
+              </span>
+            </div>
+
+            <div className="bg-card rounded-xl p-4 space-y-3">
+              {/* Security notice */}
+              <div className="rounded-lg bg-emerald-950/25 border border-emerald-700/35 px-3 py-2 text-[11px] text-emerald-200/90 leading-relaxed">
+                <strong>{tr('Bảo vệ dữ liệu tuyệt đối:')}</strong>{' '}
+                {tr('Hệ thống chặn cứng mọi thao tác XÓA. Trợ lý AI chỉ được phép Tạo mới, Đọc hoặc Sửa trong đúng các phân hệ bạn cấp quyền dưới đây (và mọi thao tác Tạo/Sửa đều cần bạn xác nhận).')}
+              </div>
+
+              {/* Quick presets */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-muted-foreground mr-1">{tr('Chọn nhanh:')}</span>
+                <button
+                  type="button"
+                  onClick={() => setToolPermissions({ ...DEFAULT_AI_TOOL_PERMISSIONS })}
+                  className="text-[10px] px-2 py-1 rounded-md bg-blue-600/15 hover:bg-blue-600/25 text-blue-400 border border-blue-500/30 transition-colors"
+                >
+                  {tr('Toàn quyền (Tạo, Đọc, Sửa)')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setToolPermissions({ ...READ_ONLY_ALL_PERMS })}
+                  className="text-[10px] px-2 py-1 rounded-md bg-muted hover:bg-accent text-foreground/80 border border-border transition-colors"
+                >
+                  {tr('Chỉ đọc & Báo cáo')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setToolPermissions({
+                    messaging: 'write',
+                    crm: 'write',
+                    pos: 'read',
+                    reports: 'read',
+                    hrm: 'off',
+                    tasks: 'off',
+                    calendar_notes: 'off',
+                  })}
+                  className="text-[10px] px-2 py-1 rounded-md bg-muted hover:bg-accent text-foreground/80 border border-border transition-colors"
+                >
+                  {tr('CSKH & CRM')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setToolPermissions({
+                    hrm: 'write',
+                    tasks: 'write',
+                    calendar_notes: 'write',
+                    reports: 'read',
+                    messaging: 'read',
+                    crm: 'read',
+                    pos: 'off',
+                  })}
+                  className="text-[10px] px-2 py-1 rounded-md bg-muted hover:bg-accent text-foreground/80 border border-border transition-colors"
+                >
+                  {tr('Quản trị Tổ chức & Công việc')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setToolPermissions({ ...ALL_OFF_PERMS })}
+                  className="text-[10px] px-2 py-1 rounded-md bg-muted hover:bg-accent text-red-400/80 border border-border transition-colors"
+                >
+                  {tr('Tắt tất cả công cụ')}
+                </button>
+              </div>
+
+              {/* Per-module table */}
+              <div className="divide-y divide-border/60 rounded-lg border border-border overflow-hidden">
+                {AI_PERMISSION_MODULES.map(mod => {
+                  const currentLevel = toolPermissions[mod.key] || 'off';
+                  const levels: Array<{ value: AIToolAccessLevel; label: string; activeCls: string }> = mod.readOnly
+                    ? [
+                        { value: 'off', label: tr('Tắt'), activeCls: 'bg-red-500/20 text-red-300 border-red-500/40' },
+                        { value: 'read', label: tr('Chỉ đọc'), activeCls: 'bg-blue-600 text-white border-blue-500' },
+                      ]
+                    : [
+                        { value: 'off', label: tr('Tắt'), activeCls: 'bg-red-500/20 text-red-300 border-red-500/40' },
+                        { value: 'read', label: tr('Chỉ đọc'), activeCls: 'bg-sky-600 text-white border-sky-500' },
+                        { value: 'write', label: tr('Tạo, Đọc & Sửa'), activeCls: 'bg-emerald-600 text-white border-emerald-500' },
+                      ];
+
+                  return (
+                    <div key={mod.key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-3 py-2.5 bg-muted/25">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-foreground">{mod.label}</p>
+                        <p className="text-[10px] text-muted-foreground leading-snug">{mod.desc}</p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {levels.map(lvl => {
+                          const active = currentLevel === lvl.value;
+                          return (
+                            <button
+                              key={lvl.value}
+                              type="button"
+                              onClick={() => setToolPermissions(prev => ({ ...prev, [mod.key]: lvl.value }))}
+                              className={`px-2 py-1 rounded-md text-[10px] font-medium border transition-colors ${
+                                active
+                                  ? lvl.activeCls
+                                  : 'bg-background/70 text-muted-foreground border-border hover:text-foreground'
+                              }`}
+                            >
+                              {lvl.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-[10px] text-muted-foreground">
+                {tr('Thay đổi phân quyền sẽ áp dụng ngay sau khi bấm Lưu / Cập nhật ở góc dưới.')}
+              </p>
             </div>
           </div>
 
@@ -1069,9 +1314,9 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
 
         {/* ─── RIGHT: Chat Preview (collapsible) ───────────────────── */}
         {showChatPanel && (
-        <div className="w-[320px] flex-shrink-0 border-l border-border flex flex-col bg-card">
+        <div className="w-[360px] flex-shrink-0 border-l border-border flex flex-col bg-card">
           {/* Chat header */}
-          <div className="px-4 py-3 border-b border-border flex-shrink-0">
+          <div className="px-4 py-3 border-b border-border flex-shrink-0 space-y-2">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-foreground">{trx('<0/> Chat thử', { 0: <ChatIcon className="w-4 h-4 inline" /> })}</h3>
               {chatMessages.length > 0 && (
@@ -1080,8 +1325,32 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
                 </button>
               )}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {savedId ? tr('Trò chuyện trực tiếp để kiểm tra trợ lý') : tr('Lưu trợ lý trước để chat thử')}
+            <div className="flex items-center gap-1 bg-muted/60 p-0.5 rounded-lg border border-border">
+              <button
+                type="button"
+                onClick={() => setPreviewWithTools(true)}
+                className={`flex-1 py-1 px-2 rounded-md text-[10px] font-medium transition-colors ${
+                  previewWithTools ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {tr('🛠️ Trợ lý & Công cụ')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewWithTools(false)}
+                className={`flex-1 py-1 px-2 rounded-md text-[10px] font-medium transition-colors ${
+                  !previewWithTools ? 'bg-blue-600 text-white shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {tr('💬 Auto-reply JSON')}
+              </button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {!savedId
+                ? tr('Lưu trợ lý trước để chat thử')
+                : previewWithTools
+                  ? tr('Thử gọi công cụ theo phân quyền hiện tại (bấm Cập nhật trước khi test thay đổi)')
+                  : tr('Kiểm tra định dạng trả lời tự động JSON cho Workflow')}
             </p>
           </div>
 
@@ -1101,13 +1370,18 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
             )}
             {chatMessages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
+                <div className={`max-w-[90%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
                   msg.role === 'user'
                     ? 'bg-blue-600 text-white'
                     : 'bg-card text-foreground border border-border'
                 }`}>
-                  {/* Render structured segments (text + images) or plain text */}
-                  {msg.segments && msg.segments.length > 0 ? (
+                  {msg.role === 'assistant' && msg.executedTools && msg.executedTools.length > 0 && (
+                    <ExecutedToolsBadge tools={msg.executedTools} />
+                  )}
+
+                  {msg.role === 'assistant' && previewWithTools && !(msg.segments && msg.segments.length > 0) ? (
+                    <AIMarkdownRenderer content={msg.content} segments={msg.segments} isUser={false} />
+                  ) : msg.segments && msg.segments.length > 0 ? (
                     <div className="space-y-2">
                       {msg.segments.map((seg, si) => (
                         seg.type === 'image' && Array.isArray(seg.content) ? (
@@ -1124,6 +1398,13 @@ export default function AIAssistantDetailPage({ assistantId, onBack }: Props) {
                     </div>
                   ) : (
                     <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                  )}
+
+                  {msg.role === 'assistant' && msg.pendingActions && msg.pendingActions.length > 0 && (
+                    <PendingActionList
+                      actions={msg.pendingActions}
+                      onUpdateAction={updated => updateChatPendingAction(i, updated)}
+                    />
                   )}
                   {msg.role === 'assistant' && !msg.content.startsWith('Error:') && (
                     <div className="mt-1.5 pt-1.5 border-t border-border/50 space-y-1">

@@ -1,4 +1,5 @@
 import { ipcMain, dialog, shell, app, net } from 'electron';
+import AutoDownloadPolicyService from '../../../src/services/file/AutoDownloadPolicyService';
 import FileStorageService from '../../../src/services/file/FileStorageService';
 import DatabaseService from '../../../src/services/database/DatabaseService';
 import EventBroadcaster from '../../../src/services/event/EventBroadcaster';
@@ -507,8 +508,70 @@ export function registerFileIpc() {
     }) => {
         if (imageRunsOnBoss(params)) return ensureImageOnBoss(params);
         const clean = ensureImageParams(params);
+        if (!clean.force) {
+            try {
+                const db = DatabaseService.getInstance();
+                const row: any = db.getMessageById(clean.zaloId, clean.msgId, clean.threadId || undefined);
+                const resolvedThreadId = String(clean.threadId || row?.thread_id || '');
+                let hasLocalFile = false;
+                if (row?.local_paths) {
+                    const lp = typeof row.local_paths === 'string'
+                        ? JSON.parse(row.local_paths || '{}')
+                        : (row.local_paths || {});
+                    const candidate = String(lp?.main || lp?.hd || '');
+                    if (candidate && fs.existsSync(FileStorageService.resolveAbsolutePath(candidate))) {
+                        hasLocalFile = true;
+                    }
+                }
+                if (!hasLocalFile && !AutoDownloadPolicyService.getInstance().shouldAutoDownload(clean.zaloId, resolvedThreadId)) {
+                    return { success: false, skippedByPolicy: true, error: 'AUTO_DOWNLOAD_DISABLED' };
+                }
+            } catch {}
+        }
         return ensureMessageImage(clean, imageRepairDeps(clean.threadId, (zaloId, msgId, threadId, relPath) =>
             EventBroadcaster.emit('event:localPath', { zaloId, msgId, threadId, localPaths: { main: relPath } })));
+    });
+
+    ipcMain.handle('file:getAutoDownloadPrefs', async () => {
+        try {
+            return { success: true, prefs: AutoDownloadPolicyService.getInstance().getPrefs() };
+        } catch (error: any) {
+            return { success: false, error: error?.message || String(error) };
+        }
+    });
+
+    ipcMain.handle('file:setAutoDownloadPrefs', async (_event, params: {
+        globalEnabled?: boolean;
+        accountMode?: { accountId: string; mode: 'inherit' | 'on' | 'off' };
+        threadMode?: { accountId: string; threadId: string; mode: 'inherit' | 'on' | 'off' };
+        clearThreadOverrides?: { accountId?: string } | boolean;
+    }) => {
+        try {
+            const policy = AutoDownloadPolicyService.getInstance();
+            let prefs = policy.getPrefs();
+            if (typeof params?.globalEnabled === 'boolean') {
+                prefs = policy.setGlobal(params.globalEnabled);
+            }
+            if (params?.accountMode?.accountId) {
+                prefs = policy.setAccountMode(String(params.accountMode.accountId), params.accountMode.mode);
+            }
+            if (params?.threadMode?.accountId && params?.threadMode?.threadId) {
+                prefs = policy.setThreadMode(
+                    String(params.threadMode.accountId),
+                    String(params.threadMode.threadId),
+                    params.threadMode.mode,
+                );
+            }
+            if (params?.clearThreadOverrides) {
+                const accountId = typeof params.clearThreadOverrides === 'object'
+                    ? params.clearThreadOverrides.accountId
+                    : undefined;
+                prefs = policy.clearThreadOverrides(accountId);
+            }
+            return { success: true, prefs };
+        } catch (error: any) {
+            return { success: false, error: error?.message || String(error) };
+        }
     });
 
     /**
@@ -521,7 +584,17 @@ export function registerFileIpc() {
         msgId: string;
         threadId?: string;
         kind: 'image' | 'gif' | 'file' | 'voice' | 'video';
+        _fromRelay?: boolean;
     }) => {
+        if (imageRunsOnBoss(params)) {
+            const { proxyToBossWithResult } = require('../network/proxyHelper');
+            return proxyToBossWithResult('file:downloadMessageMedia', {
+                zaloId: String(params?.zaloId || ''),
+                msgId: String(params?.msgId || ''),
+                threadId: params?.threadId ? String(params.threadId) : undefined,
+                kind: params?.kind,
+            }, { timeoutMs: ENSURE_IMAGE_TIMEOUT_MS });
+        }
         const { zaloId, msgId, threadId, kind } = params || ({} as any);
         if (!zaloId || !msgId || !kind) return { success: false, error: tr('Thiếu thông tin tin nhắn') };
         const isHttp = (value: unknown): value is string => typeof value === 'string' && /^https?:\/\//i.test(value);
@@ -534,6 +607,66 @@ export function registerFileIpc() {
             const db = DatabaseService.getInstance();
             const row: any = db.getMessageById(zaloId, String(msgId), threadId);
             if (!row) return { success: false, error: tr('Không tìm thấy tin nhắn') };
+            const resolvedThreadId = String(row.thread_id || threadId || '');
+            const msgChannel = String(row.channel || 'zalo');
+
+            if (msgChannel === 'facebook') {
+                const FacebookConnectionManager = require('../../../src/utils/connection/FacebookConnectionManager').default;
+                const svc = FacebookConnectionManager.findByAccountOrFbId(zaloId);
+                let fbPaths: Record<string, string> = {};
+                if (svc) {
+                    fbPaths = await svc.downloadMessageAttachmentsOnDemand(String(row.msg_id || msgId), resolvedThreadId);
+                } else {
+                    // Offline fallback for non-E2EE URLs
+                    let atts: any[] = [];
+                    try {
+                        const parsed = JSON.parse(row.attachments || '[]');
+                        atts = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+                    } catch {}
+                    const urlAtt = atts.find((a) => isHttp(a?.url) && !a?.directPath);
+                    if (urlAtt?.url) {
+                        const u = String(urlAtt.url);
+                        const fbId = String(row.owner_zalo_id || zaloId);
+                        let rel = '';
+                        if (kind === 'image' || kind === 'gif') {
+                            rel = await FileStorageService.downloadImage(fbId, u, undefined, undefined, undefined, 'https://www.facebook.com/');
+                        } else if (kind === 'video') {
+                            rel = await FileStorageService.downloadVideo(fbId, u);
+                        } else {
+                            const fallbackName = String(urlAtt.name || `fb_${msgId}`).replace(/[/\\?%*:|"<>]/g, '_');
+                            rel = await FileStorageService.downloadFile(fbId, u, fallbackName);
+                        }
+                        if (rel) {
+                            fbPaths = { att_0: rel };
+                            db.updateLocalPaths(fbId, String(row.msg_id || msgId), fbPaths);
+                            EventBroadcaster.emit('event:localPath', {
+                                zaloId: fbId,
+                                msgId: String(row.msg_id || msgId),
+                                threadId: resolvedThreadId,
+                                localPaths: fbPaths,
+                            });
+                        }
+                    }
+                }
+                const mainFb = Object.values(fbPaths).find(Boolean) || '';
+                if (!mainFb) return { success: false, error: tr('Không tải được file Facebook (kiểm tra kết nối tài khoản hoặc link đã hết hạn)') };
+                return { success: true, localPath: mainFb, localPaths: fbPaths };
+            }
+
+            if (msgChannel === 'telegram_bot') {
+                const { downloadBotMessageMediaOnDemand } = require('../../../src/services/telegram/bot/TelegramBotChannelService');
+                return await downloadBotMessageMediaOnDemand(zaloId, resolvedThreadId, String(row.msg_id || msgId));
+            }
+
+            if (msgChannel === 'telegram_user') {
+                const { repairMessageMedia } = require('../../../src/services/telegram/TelegramUserListener');
+                const rep = await repairMessageMedia(zaloId, resolvedThreadId, String(row.msg_id || msgId), { urgent: true });
+                const lp = rep?.localPaths || {};
+                const mainPath = lp.main || lp.file || lp.video || lp.voice || '';
+                if (!rep?.success || !mainPath) return { success: false, error: rep?.error || tr('Không tải được file từ Telegram') };
+                return { success: true, localPath: mainPath, localPaths: lp };
+            }
+
             const content = parseObject(row.content);
             const contentParams = parseObject(content?.params) || {};
             // Old-format messages keep the link in the attachments column
@@ -595,6 +728,14 @@ export function registerFileIpc() {
                 }
             }
             db.updateLocalPaths(zaloId, String(row.msg_id || msgId), localPaths);
+            if (resolvedThreadId) {
+                EventBroadcaster.emit('event:localPath', {
+                    zaloId,
+                    msgId: String(row.msg_id || msgId),
+                    threadId: resolvedThreadId,
+                    localPaths,
+                });
+            }
             return { success: true, localPath: mainPath, localPaths };
         } catch (error: any) {
             Logger.warn(`[fileIpc] downloadMessageMedia ${kind} ${msgId}: ${error.message}`);

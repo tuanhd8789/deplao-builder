@@ -30,7 +30,13 @@ import AddFriendModal from '../../common/profile/AddFriendModal';
 import ConversationGroupAvatar from './ConversationGroupAvatar';
 import PeerInitials from '@/components/common/avatars/PeerInitials';
 import { requestGroupAvatar } from '@/lib/chat/conversations/groupAvatarLoader';
-import { BellIcon, BellOffIcon, BookmarkIcon, BoxIcon, EyeIcon, EyeOffIcon, CalendarIcon, ChatIcon, CheckCircleIcon, CheckIcon, CircleIcon, ClipboardListIcon, CloseIcon, CloudIcon, FolderIcon, GlobeIcon, HardDriveIcon, ImageIcon, InboxIcon, LinkIcon, MapPinIcon, MessageCircleIcon, PaperclipIcon, PinIcon, PluginIcon, StarIcon, TargetIcon, TrashIcon, UsersIcon } from '@/components/common/icons';
+import { BellIcon, BellOffIcon, BookmarkIcon, BoxIcon, DownloadIcon, EyeIcon, EyeOffIcon, CalendarIcon, ChatIcon, CheckCircleIcon, CheckIcon, CircleIcon, ClipboardListIcon, CloseIcon, CloudIcon, FolderIcon, GlobeIcon, HardDriveIcon, ImageIcon, InboxIcon, LinkIcon, MapPinIcon, MessageCircleIcon, PaperclipIcon, PinIcon, PluginIcon, StarIcon, TargetIcon, TrashIcon, UsersIcon } from '@/components/common/icons';
+import { useAutoDownloadStore } from '@/store/media/autoDownloadStore';
+import {
+  getThreadAutoDownloadMode,
+  resolveEffectiveAccountAutoDownload,
+  type AutoDownloadMode,
+} from '../../../../models/media/autoDownload';
 import { toLocalMediaUrl } from '@/lib/media/localMedia';
 import GlobalSearchPanel from './GlobalSearchPanel';
 import StarredMessagesPanel from './StarredMessagesPanel';
@@ -267,6 +273,9 @@ export default function ConversationList() {
   const [ctxMenu, setCtxMenu] = useState<{ contactId: string; zaloId: string; x: number; y: number } | null>(null);
   const [labelPickerId, setLabelPickerId] = useState<string | null>(null);
   const [muteSubmenuId, setMuteSubmenuId] = useState<string | null>(null);
+  const [autoDownloadSubmenuId, setAutoDownloadSubmenuId] = useState<string | null>(null);
+  const autoDownloadPrefs = useAutoDownloadStore((s) => s.prefs);
+  const setThreadAutoDownloadMode = useAutoDownloadStore((s) => s.setThreadMode);
   const [labelsVersion, setLabelsVersion] = useState(0);
   const [inlineLabelPicker, setInlineLabelPicker] = useState<{ contactId: string; zaloId: string; x: number; y: number } | null>(null);
   const [localLabelsByAccount, setLocalLabelsByAccount] = useState<Record<string, LocalLabelData[]>>({});
@@ -2359,6 +2368,53 @@ export default function ConversationList() {
             </div>
           )}
         </div>
+
+        {/* Auto-download attachment override submenu */}
+        {(() => {
+          const accObj = accountOf(ctxZaloId);
+          const ctxThreadAutoMode = getThreadAutoDownloadMode(autoDownloadPrefs, ctxZaloId, contact.contact_id, accObj?.facebook_id);
+          const inheritedOn = resolveEffectiveAccountAutoDownload(autoDownloadPrefs, ctxZaloId, accObj?.facebook_id);
+          const pickAutoDownload = (mode: AutoDownloadMode) => {
+            setAutoDownloadSubmenuId(null);
+            setCtxMenu(null);
+            void setThreadAutoDownloadMode(ctxZaloId, contact.contact_id, mode);
+            showNotification(
+              mode === 'off'
+                ? tr('Đã tắt tự động tải file cho hội thoại này')
+                : mode === 'on'
+                  ? tr('Đã bật tự động tải file cho hội thoại này')
+                  : tr('Hội thoại sẽ theo cài đặt mặc định của tài khoản'),
+              'success',
+            );
+          };
+          return (
+            <div
+              className="relative"
+              onMouseEnter={() => setAutoDownloadSubmenuId(contact.contact_id)}
+              onMouseLeave={() => setAutoDownloadSubmenuId(null)}
+            >
+              <CtxItem icon={<DownloadIcon className="w-4 h-4" />} label={tr('Tự động tải file')} hasArrow onClick={() => {}} />
+              {autoDownloadSubmenuId === contact.contact_id && (
+                <div className="absolute left-full top-0 bg-card border border-border rounded-xl shadow-xl min-w-[230px] py-1 z-50">
+                  {[
+                    { mode: 'inherit' as AutoDownloadMode, label: tr('Theo mặc định ({{state}})', { state: inheritedOn ? tr('Đang bật') : tr('Đang tắt') }) },
+                    { mode: 'on' as AutoDownloadMode, label: tr('Luôn tự động tải') },
+                    { mode: 'off' as AutoDownloadMode, label: tr('Không tự động tải') },
+                  ].map((opt) => (
+                    <button
+                      key={opt.mode}
+                      onClick={() => pickAutoDownload(opt.mode)}
+                      className="w-full flex items-center justify-between gap-2 px-4 py-2 text-sm text-foreground/80 hover:bg-muted hover:text-foreground text-left transition-colors"
+                    >
+                      <span>{opt.label}</span>
+                      {ctxThreadAutoMode === opt.mode && <span className="text-primary text-xs font-semibold">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {ctxChannelCap.supportsPinConversation && !ctxIsMyDocs && (
           <CtxItem icon={isPinned ? <MapPinIcon className="w-4 h-4" /> : <PinIcon className="w-4 h-4" />} label={isPinned ? tr('Bỏ ghim ({{v1}})', { v1: isTelegramUser(contact.channel) ? 'Telegram' : 'Zalo' }) : tr('Ghim (đồng bộ {{v1}})', { v1: isTelegramUser(contact.channel) ? 'Telegram' : 'Zalo' })} onClick={() => handleTogglePin(contact.contact_id, threadType)} />

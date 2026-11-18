@@ -5,6 +5,7 @@ import Logger from '../../utils/Logger';
 import { FB_TEMPLATE_MSG_TYPE, fbTemplateFromAttachments, fbTemplateText, isFbUnavailableTemplate, shouldUpgradeFbTemplate } from '../../shared/facebook/facebookTemplate';
 import BetterSqlite3 from 'better-sqlite3';
 import type { Account, Message, Contact, CRMNote, CRMCampaign, CRMCampaignContact, CRMSendLog, CRMCampaignStatus, CRMContactStatus } from '../../models';
+import type { AIContextFilter, ZaloCachedLabel } from '../../models/ai/ai';
 import type { TelegramPeer } from '../../models/telegram/telegram';
 import { CHANNEL } from '../../ui/lib/channels/channelHelper';
 import { getTelegramMessagePreview } from '../telegram/messages/TelegramMessagePreview';
@@ -1306,6 +1307,7 @@ class DatabaseService {
                 system_prompt         TEXT NOT NULL DEFAULT '',
                 pos_integration_id    TEXT DEFAULT NULL,
                 pinned_products_json  TEXT NOT NULL DEFAULT '[]',
+                tool_permissions_json TEXT NOT NULL DEFAULT '{}',
                 max_tokens            INTEGER NOT NULL DEFAULT 1000,
                 temperature           REAL NOT NULL DEFAULT 0.7,
                 context_message_count INTEGER NOT NULL DEFAULT 30,
@@ -2930,8 +2932,13 @@ class DatabaseService {
                 this.save();
                 Logger.log('[DatabaseService] Migration: added base_url to ai_assistants');
             }
+            if (aiCols.length > 0 && !aiCols.some((c: any) => c.name === 'tool_permissions_json')) {
+                conn().exec(`ALTER TABLE ai_assistants ADD COLUMN tool_permissions_json TEXT NOT NULL DEFAULT '{}'`);
+                this.save();
+                Logger.log('[DatabaseService] Migration: added tool_permissions_json to ai_assistants');
+            }
         } catch (err: any) {
-            Logger.warn(`[DatabaseService] base_url migration: ${err.message}`);
+            Logger.warn(`[DatabaseService] ai_assistants migration: ${err.message}`);
         }
 
         // ── contacts.is_forum (Telegram forum detection cache) ──────────────
@@ -2956,6 +2963,26 @@ class DatabaseService {
             }
         } catch (err: any) {
             Logger.warn(`[DatabaseService] inline_buttons migration: ${err.message}`);
+        }
+
+        // ── ai_conversations & ai_conversation_messages upgrade (AI Hub & Tools) ─
+        try {
+            const aiConvCols = this.query<any>(`PRAGMA table_info(ai_conversations)`);
+            if (aiConvCols.length > 0) {
+                if (!aiConvCols.some((c: any) => c.name === 'scope')) {
+                    conn().exec(`ALTER TABLE ai_conversations ADD COLUMN scope TEXT DEFAULT 'thread'`);
+                }
+                if (!aiConvCols.some((c: any) => c.name === 'context_filter_json')) {
+                    conn().exec(`ALTER TABLE ai_conversations ADD COLUMN context_filter_json TEXT DEFAULT NULL`);
+                }
+                conn().exec(`CREATE INDEX IF NOT EXISTS idx_ai_conv_scope ON ai_conversations(scope, last_message_at DESC)`);
+            }
+            const aiMsgCols = this.query<any>(`PRAGMA table_info(ai_conversation_messages)`);
+            if (aiMsgCols.length > 0 && !aiMsgCols.some((c: any) => c.name === 'metadata_json')) {
+                conn().exec(`ALTER TABLE ai_conversation_messages ADD COLUMN metadata_json TEXT DEFAULT NULL`);
+            }
+        } catch (err: any) {
+            Logger.warn(`[DatabaseService] ai_conversations upgrade migration: ${err.message}`);
         }
 
         // Telegram message IDs are only unique inside a chat. The original
@@ -10851,31 +10878,116 @@ class DatabaseService {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // AI CONVERSATIONS — Chat history persistence per thread + assistant
+    // AI CONVERSATIONS — Chat history persistence per thread / hub + assistant
     // ═══════════════════════════════════════════════════════════════════════
 
     /** Create or get the latest conversation for (zaloId, threadId, assistantId) */
-    public getOrCreateAIConversation(zaloId: string, threadId: string, assistantId: string): any {
+    public getOrCreateAIConversation(zaloId: string, threadId: string, assistantId: string, scope?: string): any {
         if (!this.initialized) return null;
         try {
-            // Find the latest conversation
             const existing = this.queryOne<any>(
                 `SELECT * FROM ai_conversations WHERE zalo_id = ? AND thread_id = ? AND assistant_id = ? ORDER BY last_message_at DESC LIMIT 1`,
                 [zaloId, threadId, assistantId]
             );
             if (existing) return existing;
 
-            // Create a new one
-            const id = `aiconv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-            const now = Date.now();
-            this.run(
-                `INSERT INTO ai_conversations (id, zalo_id, thread_id, assistant_id, title, last_message_at, created_at, updated_at) VALUES (?, ?, ?, ?, '', ?, ?, ?)`,
-                [id, zaloId, threadId, assistantId, now, now, now]
-            );
-            return this.queryOne<any>(`SELECT * FROM ai_conversations WHERE id = ?`, [id]);
+            return this.createAIConversation({
+                zaloId,
+                threadId,
+                assistantId,
+                scope: scope || (zaloId === '__global__' ? 'hub' : 'thread'),
+            });
         } catch (err: any) {
             Logger.error(`[DB] getOrCreateAIConversation: ${err.message}`);
             return null;
+        }
+    }
+
+    /** Always create a fresh AI conversation session */
+    public createAIConversation(params: {
+        zaloId: string;
+        threadId: string;
+        assistantId: string;
+        title?: string;
+        scope?: string;
+        contextFilterJson?: string | null;
+    }): any {
+        if (!this.initialized) return null;
+        try {
+            const id = `aiconv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+            const now = Date.now();
+            const scope = params.scope || (params.zaloId === '__global__' ? 'hub' : 'thread');
+            this.run(
+                `INSERT INTO ai_conversations (id, zalo_id, thread_id, assistant_id, title, scope, context_filter_json, last_message_at, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    id,
+                    params.zaloId || '__global__',
+                    params.threadId || '__hub__',
+                    params.assistantId,
+                    params.title || '',
+                    scope,
+                    params.contextFilterJson ?? null,
+                    now,
+                    now,
+                    now,
+                ]
+            );
+            return this.queryOne<any>(`SELECT * FROM ai_conversations WHERE id = ?`, [id]);
+        } catch (err: any) {
+            Logger.error(`[DB] createAIConversation: ${err.message}`);
+            return null;
+        }
+    }
+
+    /** List all AI conversations filtered optionally by assistantId, scope, or thread */
+    public listAllAIConversations(opts?: {
+        assistantId?: string;
+        scope?: string;
+        zaloId?: string;
+        threadId?: string;
+        limit?: number;
+    }): any[] {
+        if (!this.initialized) return [];
+        try {
+            let sql = `
+                SELECT c.*,
+                    (SELECT COUNT(*) FROM ai_conversation_messages m WHERE m.conversation_id = c.id) AS message_count
+                FROM ai_conversations c
+                WHERE 1=1
+            `;
+            const params: any[] = [];
+            if (opts?.assistantId) { sql += ` AND c.assistant_id = ?`; params.push(opts.assistantId); }
+            if (opts?.scope) { sql += ` AND COALESCE(c.scope, 'thread') = ?`; params.push(opts.scope); }
+            if (opts?.zaloId) { sql += ` AND c.zalo_id = ?`; params.push(opts.zaloId); }
+            if (opts?.threadId) { sql += ` AND c.thread_id = ?`; params.push(opts.threadId); }
+            sql += ` ORDER BY c.last_message_at DESC LIMIT ?`;
+            params.push(Math.max(1, Math.min(200, Number(opts?.limit) || 100)));
+            return this.query<any>(sql, params);
+        } catch (err: any) {
+            Logger.error(`[DB] listAllAIConversations: ${err.message}`);
+            return [];
+        }
+    }
+
+    /** Update AI conversation title, assistant, or saved context filter */
+    public updateAIConversationMeta(
+        conversationId: string,
+        patch: { title?: string; contextFilterJson?: string | null; assistantId?: string },
+    ): void {
+        if (!this.initialized || !conversationId) return;
+        try {
+            const fields: string[] = [];
+            const params: any[] = [];
+            if (patch.title !== undefined) { fields.push('title = ?'); params.push(patch.title); }
+            if (patch.contextFilterJson !== undefined) { fields.push('context_filter_json = ?'); params.push(patch.contextFilterJson); }
+            if (patch.assistantId !== undefined) { fields.push('assistant_id = ?'); params.push(patch.assistantId); }
+            if (!fields.length) return;
+            fields.push('updated_at = ?');
+            params.push(Date.now(), conversationId);
+            this.run(`UPDATE ai_conversations SET ${fields.join(', ')} WHERE id = ?`, params);
+        } catch (err: any) {
+            Logger.error(`[DB] updateAIConversationMeta: ${err.message}`);
         }
     }
 
@@ -10884,7 +10996,7 @@ class DatabaseService {
         if (!this.initialized) return [];
         try {
             return this.query<any>(
-                `SELECT * FROM ai_conversation_messages WHERE conversation_id = ? ORDER BY created_at ASC`,
+                `SELECT * FROM ai_conversation_messages WHERE conversation_id = ? ORDER BY created_at ASC, id ASC`,
                 [conversationId]
             );
         } catch (err: any) {
@@ -10893,16 +11005,21 @@ class DatabaseService {
         }
     }
 
-    /** Add a message to the conversation */
-    public addAIConversationMessage(conversationId: string, role: string, content: string, segmentsJson?: string): void {
-        if (!this.initialized) return;
+    /** Add a message to the conversation and return its row id */
+    public addAIConversationMessage(
+        conversationId: string,
+        role: string,
+        content: string,
+        segmentsJson?: string,
+        metadataJson?: string,
+    ): number {
+        if (!this.initialized) return 0;
         try {
             const now = Date.now();
-            this.run(
-                `INSERT INTO ai_conversation_messages (conversation_id, role, content, segments_json, created_at) VALUES (?, ?, ?, ?, ?)`,
-                [conversationId, role, content, segmentsJson || null, now]
+            const msgId = this.runInsert(
+                `INSERT INTO ai_conversation_messages (conversation_id, role, content, segments_json, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+                [conversationId, role, content, segmentsJson || null, metadataJson || null, now]
             );
-            // Update last_message_at and title if this is the first message
             this.run(
                 `UPDATE ai_conversations SET last_message_at = ?, updated_at = ? WHERE id = ?`,
                 [now, now, conversationId]
@@ -10912,11 +11029,23 @@ class DatabaseService {
                 const msgCount = this.queryOne<any>(`SELECT COUNT(*) as cnt FROM ai_conversation_messages WHERE conversation_id = ?`, [conversationId]);
                 if (msgCount?.cnt === 1) {
                     const title = content.slice(0, 80) + (content.length > 80 ? '...' : '');
-                    this.run(`UPDATE ai_conversations SET title = ? WHERE id = ? AND title = ''`, [title, conversationId]);
+                    this.run(`UPDATE ai_conversations SET title = ? WHERE id = ? AND (title IS NULL OR title = '')`, [title, conversationId]);
                 }
             }
+            return msgId;
         } catch (err: any) {
             Logger.error(`[DB] addAIConversationMessage: ${err.message}`);
+            return 0;
+        }
+    }
+
+    /** Update metadata_json on a saved AI conversation message (e.g., pending action approval state) */
+    public updateAIConversationMessageMeta(messageId: number, metadataJson: string): void {
+        if (!this.initialized || !messageId) return;
+        try {
+            this.run(`UPDATE ai_conversation_messages SET metadata_json = ? WHERE id = ?`, [metadataJson, messageId]);
+        } catch (err: any) {
+            Logger.error(`[DB] updateAIConversationMessageMeta: ${err.message}`);
         }
     }
 
@@ -10956,6 +11085,549 @@ class DatabaseService {
             this.run(`DELETE FROM ai_conversations WHERE zalo_id = ? AND thread_id = ?`, [zaloId, threadId]);
         } catch (err: any) {
             Logger.error(`[DB] deleteAIConversationsForThread: ${err.message}`);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // AI CONTEXT FILTER — Multi-dimensional message & sender querying (up to 1000)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private resolveAITimeRange(filter?: AIContextFilter): { fromTs: number | null; toTs: number | null } {
+        const preset = filter?.timePreset;
+        if (preset === 'custom' || (!preset && (filter?.fromTs || filter?.toTs))) {
+            return {
+                fromTs: typeof filter?.fromTs === 'number' && Number.isFinite(filter.fromTs) ? filter.fromTs : null,
+                toTs: typeof filter?.toTs === 'number' && Number.isFinite(filter.toTs) ? filter.toTs : null,
+            };
+        }
+        if (!preset || preset === 'all') return { fromTs: null, toTs: null };
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        if (preset === 'today') return { fromTs: startOfToday, toTs: Date.now() };
+        if (preset === 'yesterday') return { fromTs: startOfToday - 86_400_000, toTs: startOfToday - 1 };
+        if (preset === '7d') return { fromTs: Date.now() - 7 * 86_400_000, toTs: Date.now() };
+        if (preset === '30d') return { fromTs: Date.now() - 30 * 86_400_000, toTs: Date.now() };
+        return { fromTs: null, toTs: null };
+    }
+
+    private formatAIMessageBody(rawContent: any, msgType?: string): string {
+        if (rawContent === null || rawContent === undefined) return '';
+        let text = '';
+        if (typeof rawContent === 'string') {
+            const trimmed = rawContent.trim();
+            if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+                try {
+                    const obj = JSON.parse(trimmed);
+                    text = obj?.msg || obj?.text || obj?.title || obj?.description || obj?.caption || '';
+                    if (!text && obj?.href) text = `[Link] ${obj.href}`;
+                    if (!text) text = trimmed;
+                } catch {
+                    text = trimmed;
+                }
+            } else {
+                text = trimmed;
+            }
+        } else if (typeof rawContent === 'object') {
+            text = rawContent.msg || rawContent.text || rawContent.title || JSON.stringify(rawContent);
+        } else {
+            text = String(rawContent);
+        }
+        text = text.replace(/\s+/g, ' ').trim();
+        if (!text && msgType && msgType !== 'text') text = `[${msgType}]`;
+        return text.length > 1500 ? text.slice(0, 1500) + '…' : text;
+    }
+
+    /** Load accounts, conversations, local labels, and CRM tags for the AI Context Filter builder */
+    /** Normalize Zalo label conversation id (strip "g"/"u" prefix on numeric IDs) */
+    private normalizeZaloLabelConvId(raw: unknown): string {
+        return String(raw || '').trim().replace(/^[ug](?=\d)/i, '');
+    }
+
+    /** Cache Zalo cloud labels (`labelData` from `zalo:getLabels`) per account in app_settings */
+    public saveZaloLabelsCache(zaloId: string, labelData: any[]): void {
+        if (!this.initialized || !zaloId || !Array.isArray(labelData)) return;
+        try {
+            const clean: ZaloCachedLabel[] = labelData
+                .filter((l: any) => l && l.id != null)
+                .map((l: any) => {
+                    const seen = new Set<string>();
+                    const conversations: string[] = [];
+                    for (const cid of Array.isArray(l.conversations) ? l.conversations : []) {
+                        const norm = this.normalizeZaloLabelConvId(cid);
+                        if (norm && !seen.has(norm)) {
+                            seen.add(norm);
+                            conversations.push(norm);
+                        }
+                    }
+                    return {
+                        accountId: String(zaloId),
+                        id: Number(l.id),
+                        text: String(l.text || ''),
+                        color: String(l.color || '#3b82f6'),
+                        emoji: String(l.emoji || ''),
+                        conversations,
+                    };
+                });
+            this.setSetting(`zalo_labels_cache_${zaloId}`, JSON.stringify(clean));
+        } catch (err: any) {
+            Logger.warn(`[DB] saveZaloLabelsCache(${zaloId}): ${err.message}`);
+        }
+    }
+
+    /** Load cached Zalo cloud labels for one account (`null` = never cached yet) */
+    public getZaloLabelsCache(zaloId: string): ZaloCachedLabel[] | null {
+        if (!this.initialized || !zaloId) return null;
+        try {
+            const raw = this.getSetting(`zalo_labels_cache_${zaloId}`);
+            if (raw === null || raw === '') return null;
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return null;
+            return parsed.map((l: any) => ({
+                accountId: String(zaloId),
+                id: Number(l.id),
+                text: String(l.text || ''),
+                color: String(l.color || '#3b82f6'),
+                emoji: String(l.emoji || ''),
+                conversations: Array.isArray(l.conversations)
+                    ? l.conversations.map((c: any) => this.normalizeZaloLabelConvId(c)).filter(Boolean)
+                    : [],
+            }));
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Build shared SQL WHERE clause & bound parameters for Local Labels, CRM Tags, and Zalo Cloud Labels.
+     * Supports `labelMatchMode`: `'any'` (OR, default) or `'all'` (AND).
+     */
+    private buildAILabelWhereClause(
+        filter: AIContextFilter,
+        ownerExpr: string,
+        threadExpr: string,
+        paramsOut: any[],
+    ): { clause: string | null; emptyMatch: boolean } {
+        const localLabelIds = (filter.localLabelIds || []).map(Number).filter(Number.isFinite);
+        const crmTagIds = (filter.crmTagIds || []).map(Number).filter(Number.isFinite);
+        const zaloLabelKeys = Array.from(
+            new Set((filter.zaloLabelKeys || []).map((k) => String(k || '').trim()).filter((k) => k.includes(':'))),
+        );
+
+        if (!localLabelIds.length && !crmTagIds.length && !zaloLabelKeys.length) {
+            return { clause: null, emptyMatch: false };
+        }
+
+        const matchMode = filter.labelMatchMode === 'all' ? 'all' : 'any';
+
+        // Resolve Zalo label keys (`accountId:labelId`) via cached Zalo labels
+        const byAccountCache = new Map<string, ZaloCachedLabel[]>();
+        const resolveZaloLabel = (key: string): ZaloCachedLabel | undefined => {
+            const sep = key.lastIndexOf(':');
+            if (sep <= 0) return undefined;
+            const accId = key.slice(0, sep);
+            const labelId = Number(key.slice(sep + 1));
+            if (!accId || !Number.isFinite(labelId)) return undefined;
+            if (!byAccountCache.has(accId)) {
+                byAccountCache.set(accId, this.getZaloLabelsCache(accId) || []);
+            }
+            return byAccountCache.get(accId)?.find((l) => l.id === labelId);
+        };
+
+        const buildPairSql = (pairsByAccount: Map<string, Set<string>>, targetParams: any[]): string | null => {
+            const accClauses: string[] = [];
+            for (const [accId, convSet] of pairsByAccount.entries()) {
+                if (convSet.size === 0) continue;
+                const convIds = Array.from(convSet);
+                accClauses.push(`(${ownerExpr} = ? AND ${threadExpr} IN (${convIds.map(() => '?').join(',')}))`);
+                targetParams.push(accId, ...convIds);
+            }
+            if (!accClauses.length) return null;
+            return accClauses.length === 1 ? accClauses[0] : `(${accClauses.join(' OR ')})`;
+        };
+
+        if (matchMode === 'any') {
+            const orClauses: string[] = [];
+            if (localLabelIds.length) {
+                orClauses.push(
+                    `EXISTS (SELECT 1 FROM local_label_threads llt WHERE llt.owner_zalo_id = ${ownerExpr} AND llt.thread_id = ${threadExpr} AND llt.label_id IN (${localLabelIds.map(() => '?').join(',')}))`,
+                );
+                paramsOut.push(...localLabelIds);
+            }
+            if (crmTagIds.length) {
+                orClauses.push(
+                    `EXISTS (SELECT 1 FROM crm_contact_tags cct WHERE cct.owner_zalo_id = ${ownerExpr} AND cct.contact_id = ${threadExpr} AND cct.tag_id IN (${crmTagIds.map(() => '?').join(',')}))`,
+                );
+                paramsOut.push(...crmTagIds);
+            }
+            if (zaloLabelKeys.length) {
+                const pairs = new Map<string, Set<string>>();
+                for (const key of zaloLabelKeys) {
+                    const lbl = resolveZaloLabel(key);
+                    if (!lbl || !lbl.conversations.length) continue;
+                    let set = pairs.get(lbl.accountId);
+                    if (!set) {
+                        set = new Set<string>();
+                        pairs.set(lbl.accountId, set);
+                    }
+                    for (const cid of lbl.conversations) set.add(cid);
+                }
+                const zaloSql = buildPairSql(pairs, paramsOut);
+                if (zaloSql) orClauses.push(zaloSql);
+            }
+            if (!orClauses.length) {
+                return { clause: null, emptyMatch: true };
+            }
+            return { clause: `(${orClauses.join(' OR ')})`, emptyMatch: false };
+        }
+
+        // 'all' (AND) mode: every chosen label / label group must match
+        const andClauses: string[] = [];
+        for (const lid of localLabelIds) {
+            andClauses.push(
+                `EXISTS (SELECT 1 FROM local_label_threads llt WHERE llt.owner_zalo_id = ${ownerExpr} AND llt.thread_id = ${threadExpr} AND llt.label_id = ?)`,
+            );
+            paramsOut.push(lid);
+        }
+        for (const tid of crmTagIds) {
+            andClauses.push(
+                `EXISTS (SELECT 1 FROM crm_contact_tags cct WHERE cct.owner_zalo_id = ${ownerExpr} AND cct.contact_id = ${threadExpr} AND cct.tag_id = ?)`,
+            );
+            paramsOut.push(tid);
+        }
+        if (zaloLabelKeys.length) {
+            // Group keys sharing the same label name across accounts into one logical label requirement
+            const byName = new Map<string, Map<string, Set<string>>>();
+            for (const key of zaloLabelKeys) {
+                const lbl = resolveZaloLabel(key);
+                const groupKey = lbl ? `name:${lbl.text.trim().toLowerCase()}` : `key:${key}`;
+                let pairs = byName.get(groupKey);
+                if (!pairs) {
+                    pairs = new Map<string, Set<string>>();
+                    byName.set(groupKey, pairs);
+                }
+                if (lbl && lbl.conversations.length) {
+                    let set = pairs.get(lbl.accountId);
+                    if (!set) {
+                        set = new Set<string>();
+                        pairs.set(lbl.accountId, set);
+                    }
+                    for (const cid of lbl.conversations) set.add(cid);
+                }
+            }
+            for (const pairs of byName.values()) {
+                const sql = buildPairSql(pairs, paramsOut);
+                if (!sql) return { clause: null, emptyMatch: true };
+                andClauses.push(sql);
+            }
+        }
+        if (!andClauses.length) {
+            return { clause: null, emptyMatch: true };
+        }
+        return { clause: `(${andClauses.join(' AND ')})`, emptyMatch: false };
+    }
+
+    public getAIContextFilterOptions(accountIds?: string[]): {
+        accounts: any[];
+        threads: any[];
+        localLabels: any[];
+        crmTags: any[];
+        zaloLabels: ZaloCachedLabel[];
+    } {
+        if (!this.initialized) return { accounts: [], threads: [], localLabels: [], crmTags: [], zaloLabels: [] };
+        try {
+            const accounts = this.query<any>(
+                `SELECT zalo_id, full_name, avatar_url, COALESCE(NULLIF(channel, ''), 'zalo') AS channel, is_active
+                 FROM accounts ORDER BY is_active DESC, full_name ASC`
+            );
+            const accFilter = (accountIds || []).map(String).filter(Boolean);
+            const accWhere = accFilter.length ? `WHERE c.owner_zalo_id IN (${accFilter.map(() => '?').join(',')})` : '';
+
+            // Collect cached Zalo cloud labels for active Zalo accounts
+            const targetZaloAccounts = accounts.filter(
+                (a) => (!a.channel || a.channel === 'zalo') && (!accFilter.length || accFilter.includes(a.zalo_id)),
+            );
+            const zaloLabels: ZaloCachedLabel[] = [];
+            const threadZaloLabels = new Map<string, string[]>();
+            for (const acc of targetZaloAccounts) {
+                const cached = this.getZaloLabelsCache(acc.zalo_id);
+                if (!cached) continue;
+                for (const lbl of cached) {
+                    zaloLabels.push(lbl);
+                    const labelKey = `${lbl.accountId}:${lbl.id}`;
+                    for (const cid of lbl.conversations) {
+                        const threadKey = `${lbl.accountId}::${cid}`;
+                        const list = threadZaloLabels.get(threadKey);
+                        if (list) {
+                            if (!list.includes(labelKey)) list.push(labelKey);
+                        } else {
+                            threadZaloLabels.set(threadKey, [labelKey]);
+                        }
+                    }
+                }
+            }
+
+            const threads = this.query<any>(
+                `SELECT c.owner_zalo_id AS account_id, c.contact_id AS thread_id,
+                        COALESCE(NULLIF(c.alias, ''), NULLIF(c.display_name, ''), c.contact_id) AS name,
+                        COALESCE(NULLIF(c.contact_type, ''), 'user') AS contact_type,
+                        COALESCE(NULLIF(c.channel, ''), COALESCE(NULLIF(a.channel, ''), 'zalo')) AS channel,
+                        c.avatar_url,
+                        ${CONTACT_LAST_MS_SQL} AS last_message_time,
+                        (SELECT GROUP_CONCAT(llt.label_id) FROM local_label_threads llt WHERE llt.owner_zalo_id = c.owner_zalo_id AND llt.thread_id = c.contact_id) AS local_label_ids,
+                        (SELECT GROUP_CONCAT(cct.tag_id) FROM crm_contact_tags cct WHERE cct.owner_zalo_id = c.owner_zalo_id AND cct.contact_id = c.contact_id) AS crm_tag_ids
+                 FROM contacts c
+                 LEFT JOIN accounts a ON a.zalo_id = c.owner_zalo_id
+                 ${accWhere}
+                 ORDER BY last_message_time DESC
+                 LIMIT 1000`,
+                accFilter
+            ).map(t => ({
+                ...t,
+                local_label_ids: t.local_label_ids ? String(t.local_label_ids).split(',').map(Number).filter(Number.isFinite) : [],
+                crm_tag_ids: t.crm_tag_ids ? String(t.crm_tag_ids).split(',').map(Number).filter(Number.isFinite) : [],
+                zalo_label_keys: threadZaloLabels.get(`${t.account_id}::${t.thread_id}`) || [],
+            }));
+
+            const localLabels = this.query<any>(
+                `SELECT id, name, color, emoji, page_ids FROM local_labels WHERE COALESCE(is_active, 1) = 1 ORDER BY sort_order ASC, name ASC`
+            );
+            const crmTags = this.query<any>(
+                `SELECT id, owner_zalo_id, name, color, emoji FROM crm_tags ORDER BY name ASC`
+            );
+
+            return { accounts, threads, localLabels, crmTags, zaloLabels };
+        } catch (err: any) {
+            Logger.error(`[DB] getAIContextFilterOptions: ${err.message}`);
+            return { accounts: [], threads: [], localLabels: [], crmTags: [], zaloLabels: [] };
+        }
+    }
+
+    /** Load distinct senders appearing in the matching accounts/threads/labels/time range */
+    public getAIContextSenders(opts: AIContextFilter = {}): Array<{ senderId: string; displayName: string; isSelf: boolean; msgCount: number }> {
+        if (!this.initialized) return [];
+        try {
+            const where: string[] = [`COALESCE(m.is_recalled, 0) = 0`];
+            const params: any[] = [];
+
+            const accounts = (opts.accountIds || []).map(String).filter(Boolean);
+            if (accounts.length) {
+                where.push(`m.owner_zalo_id IN (${accounts.map(() => '?').join(',')})`);
+                params.push(...accounts);
+            }
+            const channels = (opts.channels || []).map(String).filter(Boolean);
+            if (channels.length) {
+                where.push(`COALESCE(NULLIF(m.channel, ''), NULLIF(c.channel, ''), NULLIF(a.channel, ''), 'zalo') IN (${channels.map(() => '?').join(',')})`);
+                params.push(...channels);
+            }
+            if (opts.threadType === 'direct') {
+                where.push(`m.thread_type = 0 AND COALESCE(NULLIF(c.contact_type, ''), 'user') = 'user'`);
+            } else if (opts.threadType === 'group') {
+                where.push(`(m.thread_type = 1 OR c.contact_type IN ('group', 'channel'))`);
+            }
+            const labelFilter = this.buildAILabelWhereClause(opts, 'm.owner_zalo_id', 'm.thread_id', params);
+            if (labelFilter.emptyMatch) return [];
+            if (labelFilter.clause) where.push(labelFilter.clause);
+
+            const tKeys = (opts.threadKeys || []).filter(t => t?.accountId && t?.threadId).slice(0, 200);
+            if (tKeys.length) {
+                where.push(`(${tKeys.map(() => `(m.owner_zalo_id = ? AND m.thread_id = ?)`).join(' OR ')})`);
+                for (const tk of tKeys) {
+                    params.push(String(tk.accountId), String(tk.threadId));
+                }
+            }
+            const { fromTs, toTs } = this.resolveAITimeRange(opts);
+            if (fromTs !== null) {
+                const fromSec = Math.floor(fromTs / 1000);
+                where.push(`(m.timestamp >= ? OR (m.timestamp > 0 AND m.timestamp < 100000000000 AND m.timestamp >= ?))`);
+                params.push(fromTs, fromSec);
+            }
+            if (toTs !== null) {
+                const toSec = Math.ceil(toTs / 1000);
+                where.push(`(m.timestamp <= ? OR (m.timestamp > 0 AND m.timestamp < 100000000000 AND m.timestamp <= ?))`);
+                params.push(toTs, toSec);
+            }
+
+            const rows = this.query<any>(
+                `SELECT m.is_sent,
+                        m.sender_id,
+                        COALESCE(
+                            NULLIF(MAX(gm.display_name), ''),
+                            NULLIF(MAX(sc.alias), ''),
+                            NULLIF(MAX(sc.display_name), ''),
+                            NULLIF(MAX(tp.display_name), ''),
+                            ''
+                        ) AS resolved_name,
+                        COUNT(*) AS msg_count
+                 FROM messages m
+                 LEFT JOIN contacts c ON c.owner_zalo_id = m.owner_zalo_id AND c.contact_id = m.thread_id
+                 LEFT JOIN accounts a ON a.zalo_id = m.owner_zalo_id
+                 LEFT JOIN page_group_member gm ON gm.owner_zalo_id = m.owner_zalo_id AND gm.group_id = m.thread_id AND gm.member_id = m.sender_id
+                 LEFT JOIN contacts sc ON sc.owner_zalo_id = m.owner_zalo_id AND sc.contact_id = m.sender_id
+                 LEFT JOIN telegram_peers tp ON tp.owner_zalo_id = m.owner_zalo_id AND tp.peer_id = m.sender_id
+                 WHERE ${where.join(' AND ')}
+                 GROUP BY m.is_sent, CASE WHEN m.is_sent = 1 THEN '__self__' ELSE m.sender_id END
+                 ORDER BY m.is_sent DESC, msg_count DESC
+                 LIMIT 200`,
+                params
+            );
+
+            const results: Array<{ senderId: string; displayName: string; isSelf: boolean; msgCount: number }> = [];
+            let selfTotal = 0;
+            for (const r of rows) {
+                if (Number(r.is_sent) === 1) {
+                    selfTotal += Number(r.msg_count) || 0;
+                    continue;
+                }
+                const sid = String(r.sender_id || '').trim();
+                if (!sid) continue;
+                results.push({
+                    senderId: sid,
+                    displayName: r.resolved_name || sid,
+                    isSelf: false,
+                    msgCount: Number(r.msg_count) || 0,
+                });
+            }
+            if (selfTotal > 0) {
+                results.unshift({
+                    senderId: '__self__',
+                    displayName: 'Tôi (Tin đã gửi)',
+                    isSelf: true,
+                    msgCount: selfTotal,
+                });
+            }
+            return results;
+        } catch (err: any) {
+            Logger.error(`[DB] getAIContextSenders: ${err.message}`);
+            return [];
+        }
+    }
+
+    /** Query up to 1,000 messages matching multi-dimensional filter criteria for AI Context */
+    public queryMessagesForAIContext(filter: AIContextFilter = {}): {
+        messages: any[];
+        formattedContext: string;
+        count: number;
+        threadCount: number;
+    } {
+        if (!this.initialized) return { messages: [], formattedContext: '', count: 0, threadCount: 0 };
+        try {
+            const where: string[] = [`COALESCE(m.is_recalled, 0) = 0`, `TRIM(m.content) <> ''`];
+            const params: any[] = [];
+
+            const { fromTs, toTs } = this.resolveAITimeRange(filter);
+            if (fromTs !== null) {
+                const fromSec = Math.floor(fromTs / 1000);
+                where.push(`(m.timestamp >= ? OR (m.timestamp > 0 AND m.timestamp < 100000000000 AND m.timestamp >= ?))`);
+                params.push(fromTs, fromSec);
+            }
+            if (toTs !== null) {
+                const toSec = Math.ceil(toTs / 1000);
+                where.push(`(m.timestamp <= ? OR (m.timestamp > 0 AND m.timestamp < 100000000000 AND m.timestamp <= ?))`);
+                params.push(toTs, toSec);
+            }
+
+            const accountIds = (filter.accountIds || []).map(String).filter(Boolean);
+            if (accountIds.length) {
+                where.push(`m.owner_zalo_id IN (${accountIds.map(() => '?').join(',')})`);
+                params.push(...accountIds);
+            }
+
+            const channels = (filter.channels || []).map(String).filter(Boolean);
+            if (channels.length) {
+                where.push(`COALESCE(NULLIF(m.channel, ''), NULLIF(c.channel, ''), NULLIF(a.channel, ''), 'zalo') IN (${channels.map(() => '?').join(',')})`);
+                params.push(...channels);
+            }
+
+            const threadKeys = (filter.threadKeys || []).filter(t => t?.accountId && t?.threadId).slice(0, 200);
+            if (threadKeys.length) {
+                where.push(`(${threadKeys.map(() => `(m.owner_zalo_id = ? AND m.thread_id = ?)`).join(' OR ')})`);
+                for (const tk of threadKeys) {
+                    params.push(String(tk.accountId), String(tk.threadId));
+                }
+            }
+
+            if (filter.threadType === 'direct') {
+                where.push(`m.thread_type = 0 AND COALESCE(NULLIF(c.contact_type, ''), 'user') = 'user'`);
+            } else if (filter.threadType === 'group') {
+                where.push(`(m.thread_type = 1 OR c.contact_type IN ('group', 'channel'))`);
+            }
+
+            const labelFilter = this.buildAILabelWhereClause(filter, 'm.owner_zalo_id', 'm.thread_id', params);
+            if (labelFilter.emptyMatch) {
+                return { messages: [], formattedContext: '', count: 0, threadCount: 0 };
+            }
+            if (labelFilter.clause) {
+                where.push(labelFilter.clause);
+            }
+
+            const senderIds = (filter.senderIds || []).map(String).filter(Boolean);
+            if (senderIds.length) {
+                const includeSelf = senderIds.includes('__self__');
+                const otherSenders = senderIds.filter(s => s !== '__self__');
+                const senderClauses: string[] = [];
+                if (includeSelf) senderClauses.push(`m.is_sent = 1`);
+                if (otherSenders.length) {
+                    senderClauses.push(`(COALESCE(m.is_sent, 0) = 0 AND m.sender_id IN (${otherSenders.map(() => '?').join(',')}))`);
+                    params.push(...otherSenders);
+                }
+                if (senderClauses.length) where.push(`(${senderClauses.join(' OR ')})`);
+            }
+
+            const kw = filter.keyword?.trim();
+            if (kw) {
+                where.push(`m.content LIKE ?`);
+                params.push(`%${kw}%`);
+            }
+
+            const limit = Math.min(1000, Math.max(1, Math.round(Number(filter.limit) || 200)));
+            const rows = this.query<any>(
+                `SELECT m.msg_id, m.owner_zalo_id, m.thread_id, m.thread_type, m.sender_id, m.content,
+                        m.msg_type, m.timestamp, m.is_sent,
+                        COALESCE(NULLIF(m.channel, ''), NULLIF(c.channel, ''), NULLIF(a.channel, ''), 'zalo') AS channel,
+                        COALESCE(NULLIF(c.alias, ''), NULLIF(c.display_name, ''), m.thread_id) AS thread_name,
+                        COALESCE(NULLIF(c.contact_type, ''), CASE WHEN m.thread_type = 1 THEN 'group' ELSE 'user' END) AS thread_contact_type,
+                        COALESCE(NULLIF(gm.display_name, ''), NULLIF(sc.alias, ''), NULLIF(sc.display_name, ''), NULLIF(tp.display_name, ''), '') AS sender_name
+                 FROM messages m
+                 LEFT JOIN contacts c ON c.owner_zalo_id = m.owner_zalo_id AND c.contact_id = m.thread_id
+                 LEFT JOIN accounts a ON a.zalo_id = m.owner_zalo_id
+                 LEFT JOIN page_group_member gm ON gm.owner_zalo_id = m.owner_zalo_id AND gm.group_id = m.thread_id AND gm.member_id = m.sender_id
+                 LEFT JOIN contacts sc ON sc.owner_zalo_id = m.owner_zalo_id AND sc.contact_id = m.sender_id
+                 LEFT JOIN telegram_peers tp ON tp.owner_zalo_id = m.owner_zalo_id AND tp.peer_id = m.sender_id
+                 WHERE ${where.join(' AND ')}
+                 ORDER BY m.timestamp DESC, m.id DESC
+                 LIMIT ?`,
+                [...params, limit]
+            );
+
+            const chronological = rows.reverse();
+            const distinctThreads = new Set<string>();
+            const pad = (n: number) => String(n).padStart(2, '0');
+            const lines: string[] = [];
+
+            for (const m of chronological) {
+                distinctThreads.add(`${m.owner_zalo_id}_${m.thread_id}`);
+                const ts = Number(m.timestamp);
+                const ms = Number.isFinite(ts) && ts > 0 ? (ts < 1e12 ? ts * 1000 : ts) : 0;
+                const d = ms ? new Date(ms) : null;
+                const timeStr = d ? `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}` : '';
+                const ch = String(m.channel || 'zalo').toUpperCase();
+                const isGroup = Number(m.thread_type) === 1 || m.thread_contact_type === 'group';
+                const tName = m.thread_name || m.thread_id;
+                const who = Number(m.is_sent) === 1 ? 'Tôi' : (m.sender_name || m.sender_id || 'Khách');
+                const body = this.formatAIMessageBody(m.content, m.msg_type);
+                if (!body) continue;
+                lines.push(`[${ch} | ${tName}${isGroup ? ' (Nhóm)' : ''}${timeStr ? ` | ${timeStr}` : ''}] ${who}: ${body}`);
+            }
+
+            return {
+                messages: chronological,
+                formattedContext: lines.join('\n'),
+                count: chronological.length,
+                threadCount: distinctThreads.size,
+            };
+        } catch (err: any) {
+            Logger.error(`[DB] queryMessagesForAIContext: ${err.message}`);
+            return { messages: [], formattedContext: '', count: 0, threadCount: 0 };
         }
     }
 }

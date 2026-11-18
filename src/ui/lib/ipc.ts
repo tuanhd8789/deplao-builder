@@ -761,6 +761,13 @@ declare global {
         checkMediaExpired: (params: { zaloId: string; msgId: string; urls: string[]; force?: boolean }) => Promise<{ success: boolean; expired: boolean; unknown?: boolean; error?: string }>;
         /** Download the media of one Zalo message to this machine (relays the message when it is not downloaded yet), update local_paths */
         downloadMessageMedia: (params: { zaloId: string; msgId: string; threadId?: string; kind: 'image' | 'gif' | 'file' | 'voice' | 'video' }) => Promise<{ success: boolean; localPath?: string; localPaths?: Record<string, string>; error?: string }>;
+        getAutoDownloadPrefs: () => Promise<{ success: boolean; prefs?: import('../../models/media/autoDownload').AutoDownloadPrefs; error?: string }>;
+        setAutoDownloadPrefs: (params: {
+          globalEnabled?: boolean;
+          accountMode?: { accountId: string; mode: 'inherit' | 'on' | 'off' };
+          threadMode?: { accountId: string; threadId: string; mode: 'inherit' | 'on' | 'off' };
+          clearThreadOverrides?: { accountId?: string } | boolean;
+        }) => Promise<{ success: boolean; prefs?: import('../../models/media/autoDownload').AutoDownloadPrefs; error?: string }>;
         ensureFaststart: (params: { filePath: string }) => Promise<{ success: boolean; fixed?: boolean; reason?: string; error?: string }>;
         validateLocalImages: (items: Array<{ zaloId: string; msgId: string; threadId?: string; localPath: string; remoteUrl?: string }>) => Promise<{ success: boolean; corrupted: Array<{ zaloId: string; msgId: string; threadId?: string; localPath: string; remoteUrl?: string; reason: string }> }>;
         captureScreenshot: () => Promise<{ success: boolean; screenshots?: Array<{ name: string; id: string; displayId: string; thumbnail: string; width: number; height: number }>; error?: string }>;
@@ -889,15 +896,24 @@ declare global {
         chat:            (assistantId: string, messages: any[], structured?: boolean, maxTokens?: number) => Promise<{ success: boolean; result?: string; totalTokens?: number; promptTokens?: number; completionTokens?: number; error?: string }>;
         /** Use only the caller's messages (no persona / assistant knowledge inserted) - AI Workflow Builder */
         chatRaw?:        (params: { assistantId: string; messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>; maxTokens?: number; temperature?: number }) => Promise<{ success: boolean; result?: string; totalTokens?: number; promptTokens?: number; completionTokens?: number; error?: string }>;
+        chatWithTools?:  (params: { assistantId: string; messages: Array<{ role: string; content: string }>; enableTools?: boolean; contextBlock?: string; maxTokensOverride?: number }) => Promise<{ success: boolean; result?: string; totalTokens?: number; promptTokens?: number; completionTokens?: number; executedTools?: any[]; pendingActions?: any[]; error?: string }>;
+        executeToolAction?: (params: { toolName: string; args: Record<string, any>; assistantId?: string }) => Promise<{ success: boolean; summary?: string; data?: any; error?: string }>;
+        getContextFilterOptions?: (params?: { accountIds?: string[]; forceRefreshZaloLabels?: boolean; clientZaloLabels?: Record<string, any[]> }) => Promise<{ success: boolean; accounts: any[]; threads: any[]; localLabels: any[]; crmTags: any[]; zaloLabels?: any[]; error?: string }>;
+        getContextSenders?: (params?: any) => Promise<{ success: boolean; senders: Array<{ senderId: string; displayName: string; isSelf: boolean; msgCount: number }>; error?: string }>;
+        queryContextMessages?: (params?: any) => Promise<{ success: boolean; messages: any[]; formattedContext: string; count: number; threadCount: number; error?: string }>;
         getAccountAssistant:  (zaloId: string, role: string) => Promise<{ success: boolean; assistant?: any | null; error?: string }>;
         setAccountAssistant:  (zaloId: string, role: string, assistantId: string | null) => Promise<{ success: boolean; error?: string }>;
         getAccountAssistants: (zaloId: string) => Promise<{ success: boolean; suggestion?: string | null; panel?: string | null; error?: string }>;
         getUsageLogs:  (opts?: { assistantId?: string; dateFrom?: number; dateTo?: number; limit?: number }) => Promise<{ success: boolean; logs: any[]; error?: string }>;
         getUsageStats: (opts?: { assistantId?: string; days?: number }) => Promise<{ success: boolean; stats: any[]; error?: string }>;
         // AI Conversations
-        getOrCreateConversation: (params: { zaloId: string; threadId: string; assistantId: string }) => Promise<{ success: boolean; conversation?: any; error?: string }>;
+        getOrCreateConversation: (params: { zaloId: string; threadId: string; assistantId: string; scope?: string }) => Promise<{ success: boolean; conversation?: any; error?: string }>;
+        createConversation?:     (params: { zaloId: string; threadId: string; assistantId: string; title?: string; scope?: string; contextFilterJson?: string | null }) => Promise<{ success: boolean; conversation?: any; error?: string }>;
+        listAllConversations?:   (params?: { assistantId?: string; scope?: string; zaloId?: string; threadId?: string; limit?: number }) => Promise<{ success: boolean; conversations: any[]; error?: string }>;
+        updateConversationMeta?: (params: { conversationId: string; title?: string; contextFilterJson?: string | null; assistantId?: string }) => Promise<{ success: boolean; error?: string }>;
         getConversationMessages: (params: { conversationId: string }) => Promise<{ success: boolean; messages: any[]; error?: string }>;
-        addConversationMessage:  (params: { conversationId: string; role: string; content: string; segmentsJson?: string }) => Promise<{ success: boolean; error?: string }>;
+        addConversationMessage:  (params: { conversationId: string; role: string; content: string; segmentsJson?: string; metadataJson?: string }) => Promise<{ success: boolean; id?: number; error?: string }>;
+        updateMessageMeta?:      (params: { messageId: number; metadataJson: string }) => Promise<{ success: boolean; error?: string }>;
         getConversations:        (params: { zaloId: string; threadId: string }) => Promise<{ success: boolean; conversations: any[]; error?: string }>;
         deleteConversation:      (params: { conversationId: string }) => Promise<{ success: boolean; error?: string }>;
       };

@@ -423,6 +423,9 @@ export default function Sidebar({ onAddAccount }: SidebarProps) {
         {featureVisibility.chat && hasPerm('chat') && (
         <NavBtn icon="chat"       label={tr('Chat')}         active={view === 'chat'}       onClick={() => setView('chat')} />
         )}
+        {featureVisibility.ai !== false && (
+        <NavBtn icon="bot"        label={tr('Trợ lý AI')}    active={view === 'ai'}         onClick={() => setView('ai')} />
+        )}
         {featureVisibility.crm && hasPerm('crm') && (
         <NavBtn icon="crm"        label="CRM"          active={view === 'crm'}        onClick={() => setView('crm')} dot={hasNewCRMRequests || hasScanNewDot} />
         )}

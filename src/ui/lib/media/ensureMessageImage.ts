@@ -13,6 +13,7 @@
  */
 import React from 'react';
 import ipc from '@/lib/ipc';
+import { useAutoDownloadStore, useShouldAutoDownload } from '@/store/media/autoDownloadStore';
 import { useChatStore } from '@/store/chat/chatStore';
 import { tr } from '../../../shared/i18n';
 
@@ -87,6 +88,9 @@ export function ensureMessageImage(msg: any, opts: { force?: boolean } = {}): Pr
   const msgId = String(msg?.msg_id || '');
   const threadId = String(msg?.thread_id || '');
   if (!zaloId || !msgId) return Promise.resolve({ success: false, error: tr('Thiếu thông tin tin nhắn') });
+  if (!opts.force && !useAutoDownloadStore.getState().shouldAutoDownload(zaloId, threadId)) {
+    return Promise.resolve({ success: false, error: 'AUTO_DOWNLOAD_DISABLED' });
+  }
   const key = `${zaloId}:${msgId}`;
   if (!opts.force) {
     const done = remembered(key, Date.now());
@@ -129,12 +133,13 @@ export function useEnsureMessageImage(msg: any, enabled: boolean): void {
   msgRef.current = msg;
   const msgId = String(msg?.msg_id || '');
   const receivedAt = Number(msg?.timestamp) || 0;
+  const autoAllowed = useShouldAutoDownload(msg?.owner_zalo_id, msg?.thread_id);
   React.useEffect(() => {
-    if (!enabled || !msgId) return undefined;
+    if (!enabled || !autoAllowed || !msgId) return undefined;
     const wait = Math.max(ENSURE_OPEN_DELAY_MS, ENSURE_MIN_AGE_MS - (Date.now() - receivedAt));
     const timer = window.setTimeout(() => { void ensureMessageImage(msgRef.current); }, wait);
     return () => window.clearTimeout(timer);
-  }, [enabled, msgId, receivedAt]);
+  }, [enabled, autoAllowed, msgId, receivedAt]);
 }
 
 /** Test only. */

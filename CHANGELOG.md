@@ -1,0 +1,44 @@
+# Nhật ký thay đổi — Deplao
+
+## v26.11.2 (18/11/2026)
+
+### Điểm nổi bật
+- **Trợ lý AI toàn ứng dụng & Khung chat AI riêng**: Mở khung Trợ lý AI ở bất kỳ màn hình nào, hoặc vào không gian Trợ lý AI toàn màn hình; trượt thanh bên mượt mà, vùng chat tự co giãn không che khuất tin nhắn.
+- **AI hỗ trợ quản lý trọn bộ Deplao**: Tạo và cập nhật Phòng ban, Chức vụ, Nhân sự, Dự án, Công việc, Checklist, Lịch hẹn, Ghi chú, Nhãn & Chiến dịch CRM, tra cứu POS và lập Báo cáo tiến độ công việc.
+- **Phân quyền chi tiết từng Trợ lý AI & Khóa cứng quyền Xóa**: Chọn rõ quyền cho từng trợ lý (`Tắt` / `Chỉ đọc` / `Tạo, Đọc & Sửa`); hệ thống chặn tuyệt đối mọi thao tác xóa dữ liệu.
+- **Bộ lọc thông minh tới 1.000 tin nhắn (cả Nhãn Zalo & Nhãn Deplao)**: Lọc nhanh theo thời gian, hội thoại, cá nhân 1-1 hay nhóm, người gửi, từ khóa và mọi loại nhãn để AI phân tích chính xác.
+- **Chủ động kiểm soát tải file đính kèm 3 cấp độ**: Tùy chọn bật/tắt tự động tải file cho toàn phần mềm, từng tài khoản hoặc từng cuộc trò chuyện.
+
+---
+
+### Tính năng mới
+- **Chat với Trợ lý AI mọi lúc mọi nơi**: Bấm nút **AI** trên thanh công cụ trên cùng để dùng ngay ở mọi màn hình, hoặc mở trang **Trợ lý AI** riêng trên thanh menu bên trái.
+- **Bộ lọc ngữ cảnh đa chiều (tối đa 1.000 tin nhắn)**:
+  - Lọc theo khoảng thời gian (`Hôm nay`, `Hôm qua`, `7 ngày`, `30 ngày` hoặc khoảng ngày tự chọn).
+  - Chọn một, nhiều hoặc tất cả hội thoại; phân loại chat **1-1** hay **Nhóm**.
+  - Chọn một hoặc nhiều **người gửi**, tìm kiếm theo **từ khóa** nội dung.
+  - Lọc đồng bộ theo cả **Nhãn Deplao**, **Tag CRM** và **Nhãn gốc trên Zalo** (có nút cập nhật danh sách nhãn).
+- **Bộ công cụ hành động AI (Chỉ Tạo, Đọc & Sửa)**:
+  - **Phòng ban & Nhân sự**: Xem sơ đồ tổ chức, chấm công, đơn nghỉ phép; tạo/cập nhật hàng loạt phòng ban, chức vụ, hồ sơ nhân sự, tạo/duyệt đơn nghỉ phép.
+  - **Dự án & Công việc**: Xem và tạo/cập nhật dự án, công việc, checklist, bình luận, hạn hoàn thành, giao việc.
+  - **Lịch hẹn & Ghi chú**: Tạo/dời lịch hẹn trên Lịch ERP; tạo/cập nhật ghi chú và thư mục tài liệu.
+  - **Tóm tắt & Báo cáo công việc**: Thống kê công việc theo trạng thái, việc quá hạn, việc sắp đến hạn, năng suất theo nhân sự/phòng ban/dự án và hoạt động tin nhắn/CRM.
+  - **CRM & Hội thoại**: Tra cứu & cập nhật thông tin khách hàng, thêm/sửa ghi chú CRM, tạo/gắn nhãn, lưu bản nháp chiến dịch CRM (không tự ý gửi hàng loạt), soạn tin nhắn gửi khách (chờ xác nhận).
+- **Bảng phân quyền khi tạo/sửa Trợ lý AI**:
+  - Thiết lập độc lập mức quyền (`Tắt`, `Chỉ đọc`, `Tạo, Đọc & Sửa`) cho 7 nhóm tính năng.
+  - Có sẵn 5 nút chọn nhanh theo vai trò: `Toàn quyền (Tạo, Đọc, Sửa)`, `Chỉ đọc & Báo cáo`, `CSKH & CRM`, `Quản trị Tổ chức & Công việc`, `Tắt tất cả công cụ`.
+- **Quản lý tự động tải file đính kèm 3 cấp độ**:
+  - Cài đặt chung trong **Cài đặt → Lưu trữ**, ghi đè theo từng tài khoản trong **Cài đặt → Tài khoản**, hoặc cho từng cuộc trò chuyện/nhóm (bảng Thông tin hội thoại & menu chuột phải).
+  - Khi tắt tự động tải, có thể bấm tải thủ công ngay trên từng tin nhắn chứa ảnh, video hoặc tệp.
+
+### Cải thiện
+- Khung chat ở giữa tự động co gọn mỗi khi mở thanh **Thông tin hội thoại** hoặc **Trợ lý AI**, không còn che mất nội dung tin nhắn; hỗ trợ kéo viền để đổi kích thước.
+- Nội dung AI trả lời hỗ trợ Markdown đẹp mắt (bảng biểu, danh sách, tiêu đề, khối mẫu câu) và có nút **Xác nhận tất cả** khi AI đề xuất nhiều thao tác tạo/sửa cùng lúc.
+- Khung **Chat thử** trong màn hình cấu hình Trợ lý AI có thêm chế độ **Trợ lý & Công cụ** để kiểm tra trực tiếp khả năng gọi công cụ theo quyền đã cấp.
+
+### Sửa lỗi
+- Khắc phục lỗi bộ lọc nhãn trong khung Trợ lý AI chỉ lọc được Nhãn Deplao mà bỏ sót các hội thoại gắn **Nhãn Zalo**.
+- Khắc phục lỗi đồng bộ tin nhắn từ Zalo điện thoại (Mobile Sync) báo lỗi 404 sớm khi bản sao lưu đang được chuẩn bị.
+
+### Bảo vệ dữ liệu & An toàn
+- **Khóa cứng quyền XÓA đối với Trợ lý AI**: AI bị chặn hoàn toàn ở cả hướng dẫn hệ thống lẫn tầng xử lý backend — chỉ được phép **Tạo, Đọc, Sửa** trong đúng nhóm tính năng được cấp quyền và luôn có bước **Xác nhận** trước khi ghi thay đổi.

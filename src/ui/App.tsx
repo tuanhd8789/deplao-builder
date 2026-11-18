@@ -15,6 +15,7 @@ import IntegrationQuickPanel from './components/integration/IntegrationQuickPane
 import PluginPagesHost from './components/plugins/runtime/PluginPagesHost';
 import PluginChatPanel from './components/plugins/contributions/PluginChatPanel';
 import { initPluginStore } from './store/plugins/pluginStore';
+import { initAutoDownloadStore } from './store/media/autoDownloadStore';
 import AIQuickPanel from './components/integration/ai/AIQuickPanel';
 import ReminderNotification, { type ReminderData } from './components/chat/reminders/ReminderNotification';
 import {
@@ -74,6 +75,7 @@ const WorkflowPage = React.lazy(() => import('./components/workflow/WorkflowPage
 const IntegrationPage = React.lazy(() => import('./components/integration/IntegrationPage'));
 const AnalyticsPage = React.lazy(() => import('./components/analytics/AnalyticsPage'));
 const ErpPage = React.lazy(() => import('./components/erp/ErpPage'));
+const AIHubPage = React.lazy(() => import('./components/integration/ai/AIHubPage'));
 
 const HEALTH_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 const NETWORK_RECONNECT_COOLDOWN_MS = 15 * 1000; // 15 seconds
@@ -248,6 +250,7 @@ export default function App() {
   const setActivePluginPanel = useAppStore(s => s.setActivePluginPanel);
   // Plugin: sidebar pages, chat panel, composer buttons of enabled plugins (empty if there is no plugin).
   useEffect(() => initPluginStore(), []);
+  useEffect(() => initAutoDownloadStore(), []);
   const { setAccounts, updateListenerActive, accounts } = useAccountStore(useShallow(s => ({
     setAccounts: s.setAccounts, updateListenerActive: s.updateListenerActive, accounts: s.accounts,
   })));
@@ -328,6 +331,65 @@ export default function App() {
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
   }, [sidebarWidth]);
+
+  // ─── Resizable Global AI right panel width & Ctrl+Shift+A shortcut ──────
+  const [aiPanelWidth, setAiPanelWidth] = useState<number>(() => {
+    try { return Number(localStorage.getItem('deplao:ai-panel-width') || '0') || 380; }
+    catch { return 380; }
+  });
+  const [aiPanelResizing, setAiPanelResizing] = useState(false);
+  const aiPanelResizingRef = useRef(false);
+  const MIN_AI_PANEL_WIDTH = 300;
+  const MAX_AI_PANEL_WIDTH = 680;
+
+  useEffect(() => {
+    DataAccessor.getSetting('ai_panel_width').then(val => {
+      const n = Number(val);
+      if (n >= MIN_AI_PANEL_WIDTH && n <= MAX_AI_PANEL_WIDTH) setAiPanelWidth(n);
+    }).catch(() => {});
+  }, []);
+
+  const handleAiPanelResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    aiPanelResizingRef.current = true;
+    setAiPanelResizing(true);
+    const startX = e.clientX;
+    const startWidth = aiPanelWidth;
+    let lastX = startX;
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!aiPanelResizingRef.current) return;
+      lastX = ev.clientX;
+      const delta = startX - ev.clientX;
+      const newWidth = Math.max(MIN_AI_PANEL_WIDTH, Math.min(MAX_AI_PANEL_WIDTH, startWidth + delta));
+      setAiPanelWidth(newWidth);
+    };
+    const onMouseUp = () => {
+      aiPanelResizingRef.current = false;
+      setAiPanelResizing(false);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const finalWidth = Math.max(MIN_AI_PANEL_WIDTH, Math.min(MAX_AI_PANEL_WIDTH, startWidth + (startX - lastX)));
+      try { localStorage.setItem('deplao:ai-panel-width', String(Math.round(finalWidth))); } catch {}
+      DataAccessor.setSetting('ai_panel_width', String(Math.round(finalWidth))).catch(() => {});
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  }, [aiPanelWidth]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        useAppStore.getState().toggleAIQuickPanel();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // ─── Sync theme to <html> element ────────────────────────────────────────
   useEffect(() => {
@@ -1744,7 +1806,7 @@ export default function App() {
         )}
 
         {/* Main content */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-1 min-w-0 overflow-hidden">
           {view === 'chat' && (
             <>
               {/* Responsive: On small screens, show either list OR chat (Telegram-style) */}
@@ -1764,14 +1826,14 @@ export default function App() {
                 </>
               )}
               {(!isMobile || mobileShowChat) && (
-                <div className="flex flex-col flex-1 overflow-hidden">
+                <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
                   {/* Chat header with title + info toggle */}
                   <ChatHeader />
-                  <div className="flex flex-1 overflow-hidden relative">
-                    {/* Chat content */}
-                    <div className="flex flex-col flex-1 overflow-hidden relative"
+                  <div className="flex flex-1 min-w-0 overflow-hidden relative">
+                    {/* Chat content (shrinks on desktop when docked right panels are open) */}
+                    <div className="flex flex-col flex-1 min-w-0 overflow-hidden relative"
                          onClick={() => {
-                           if (rightInfoOverlayOpen) closeRightInfoOverlay();
+                           if (isMobile && rightInfoOverlayOpen) closeRightInfoOverlay();
                          }}>
                       <ChatWindow />
                       {/* Channel post comments are open: that section has its own composer (sends to the discussion group) → hide the channel's
@@ -1785,7 +1847,9 @@ export default function App() {
                       const contact = activeContact;
                       const isGroupThread = activeThreadType === 1 || contact?.contact_type === 'group';
                       return isGroupThread ? (
-                        <div className="absolute inset-y-0 right-0 z-50 w-80 max-w-[92vw] border-l border-border bg-card flex flex-col overflow-hidden shadow-2xl"
+                        <div className={isMobile
+                          ? 'absolute inset-y-0 right-0 z-50 w-80 max-w-[92vw] border-l border-border bg-card flex flex-col overflow-hidden shadow-2xl'
+                          : 'h-full flex-shrink-0 w-80 border-l border-border bg-card flex flex-col overflow-hidden'}
                               onClick={(e) => e.stopPropagation()}>
                           <GroupBoardPanel
                             zaloId={activeAccountId}
@@ -1813,7 +1877,9 @@ export default function App() {
                     })()}
                     {/* Right panel: conversation info */}
                     {showConversationInfo && activeThreadId && (
-                        <div className="absolute inset-y-0 right-0 z-40 max-w-[92vw] overflow-hidden"
+                        <div className={isMobile
+                          ? 'absolute inset-y-0 right-0 z-40 max-w-[92vw] overflow-hidden shadow-2xl'
+                          : 'h-full flex-shrink-0 overflow-hidden'}
                             onClick={(e) => e.stopPropagation()}>
                           <ConversationInfo />
                         </div>
@@ -1821,7 +1887,9 @@ export default function App() {
                     {/* Right panel: integration quick panel */}
                     {showIntegrationQuickPanel && (
                         <div
-                            className="absolute inset-y-0 right-0 z-40 max-w-[92vw] overflow-hidden"
+                            className={isMobile
+                              ? 'absolute inset-y-0 right-0 z-40 max-w-[92vw] overflow-hidden shadow-2xl'
+                              : 'h-full flex-shrink-0 overflow-hidden'}
                             onClick={(e) => e.stopPropagation()}
                         >
                           <IntegrationQuickPanel
@@ -1841,19 +1909,12 @@ export default function App() {
                           />
                         </div>
                     )}
-                    {/* Right panel: AI quick panel */}
-                    {showAIQuickPanel && (
-                        <div
-                            className="absolute inset-y-0 right-0 z-40 max-w-[92vw] overflow-hidden"
-                            onClick={(e) => e.stopPropagation()}
-                        >
-                          <AIQuickPanel onClose={toggleAIQuickPanel} />
-                        </div>
-                    )}
                     {/* Right panel: plugin (contributes.chatPanels) */}
                     {pluginPanelOpen && (
                         <div
-                            className="absolute inset-y-0 right-0 z-40 max-w-[92vw] overflow-hidden"
+                            className={isMobile
+                              ? 'absolute inset-y-0 right-0 z-40 max-w-[92vw] overflow-hidden shadow-2xl'
+                              : 'h-full flex-shrink-0 overflow-hidden'}
                             onClick={(e) => e.stopPropagation()}
                         >
                           <PluginChatPanel />
@@ -1866,6 +1927,7 @@ export default function App() {
           )}
 
           <Suspense fallback={<div className="flex flex-1 items-center justify-center"><Spinner size={8} /></div>}>
+            {view === 'ai' && <div className="flex-1 h-full min-w-0 overflow-hidden"><AIHubPage /></div>}
             {view === 'settings' && <div className="flex-1 h-full overflow-hidden"><Settings /></div>}
             {view === 'crm' && <div className="flex-1 h-full overflow-hidden"><CRMPage /></div>}
             {view === 'workflow' && <div className="flex-1 h-full overflow-hidden"><WorkflowPage /></div>}
@@ -1877,6 +1939,33 @@ export default function App() {
             <PluginPagesHost />
           </Suspense>
         </div>
+
+        {/* Global docked & resizable AI Quick Panel (available across all views except full-screen AI Hub) */}
+        {showAIQuickPanel && view !== 'ai' && (
+          isMobile ? (
+            <div
+              className="fixed inset-y-0 right-0 z-50 w-[92vw] max-w-md overflow-hidden shadow-2xl border-l border-border bg-card"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <AIQuickPanel onClose={toggleAIQuickPanel} />
+            </div>
+          ) : (
+            <>
+              <div
+                onMouseDown={handleAiPanelResizeStart}
+                className={`w-1 flex-shrink-0 cursor-col-resize border-l border-border hover:bg-purple-500/50 transition-colors z-10 ${aiPanelResizing ? 'bg-purple-500/70' : 'bg-card'}`}
+                title={tr('Kéo để thay đổi chiều rộng khung Trợ lý AI')}
+              />
+              <div
+                style={{ width: aiPanelWidth, flexShrink: 0 }}
+                className="h-full overflow-hidden bg-card"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <AIQuickPanel onClose={toggleAIQuickPanel} />
+              </div>
+            </>
+          )
+        )}
       </div>
 
       {/* Add Account Modal */}

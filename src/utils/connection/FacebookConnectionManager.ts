@@ -45,6 +45,19 @@ class FacebookConnectionManager {
   }
 
   /**
+   * Find an active instance by either internal fb_accounts.id or Facebook numeric UID.
+   */
+  public static findByAccountOrFbId(id: string): FacebookService | null {
+    if (!id) return null;
+    const direct = this.connections.get(id);
+    if (direct) return direct;
+    for (const svc of this.connections.values()) {
+      if (svc.getFacebookId() === id) return svc;
+    }
+    return null;
+  }
+
+  /**
    * Disconnect 1 account
    */
   public static async disconnect(accountId: string): Promise<void> {

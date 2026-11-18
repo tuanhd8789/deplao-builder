@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react';
 import DataAccessor from '@/lib/data/DataAccessor';
 import ipc from '@/lib/ipc';
 import { toLocalMediaUrl } from '@/lib/media/localMedia';
+import { useAutoDownloadStore } from '@/store/media/autoDownloadStore';
 import { useEmployeeStore } from '@/store/employee/employeeStore';
 import { toZaloJpgUrl } from '../../../../../utils/zalo/zaloImageUrl';
 
@@ -24,6 +25,7 @@ export function useThreadMediaMaintenance(deps: {
     // Employee machine: local_paths are paths on Boss's machine. Checking them against this machine's folders makes every image look "broken",
     // downloads them back to the employee machine, then changes the path, which breaks / flickers the images. Boss keeps its own images.
     if (useEmployeeStore.getState().mode === 'employee') return;
+    if (!useAutoDownloadStore.getState().shouldAutoDownload(activeAccountId, activeThreadId)) return;
     const scanKey = `${activeAccountId}_${activeThreadId}`;
     if (scannedThreadsRef.current.has(scanKey)) return;
     scannedThreadsRef.current.add(scanKey);
@@ -83,6 +85,7 @@ export function useThreadMediaMaintenance(deps: {
   const preloadScannedRef = useRef(new Set<string>());
   useEffect(() => {
     if (!activeAccountId || !activeThreadId || !threadReady) return;
+    if (!useAutoDownloadStore.getState().shouldAutoDownload(activeAccountId, activeThreadId)) return;
     const key = `${activeAccountId}_${activeThreadId}`;
     if (preloadScannedRef.current.has(key)) return;
     preloadScannedRef.current.add(key);

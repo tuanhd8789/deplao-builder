@@ -25,7 +25,17 @@ export type {
 } from './facebook/facebook';
 
 // AI
-export type { AIAssistant, AIAssistantFile, ChatMessage, AIPlatform, AIUsageLog, AIAccountAssistant } from './ai/ai';
+export type {
+    AIAssistant, AIAssistantFile, ChatMessage, AIPlatform, AIUsageLog, AIAccountAssistant,
+    ZaloCachedLabel, AIContextFilter, AIToolDefinition, AIToolCall, AIExecutedToolTrace, AIPendingToolAction, AIChatMessageMetadata,
+    AIToolModule, AIToolAccessLevel, AIToolPermissions,
+} from './ai/ai';
+export {
+    AI_TOOL_MODULES,
+    READ_ONLY_AI_TOOL_MODULES,
+    DEFAULT_AI_TOOL_PERMISSIONS,
+    normalizeAIToolPermissions,
+} from './ai/ai';
 
 // Employee
 export type {
@@ -54,3 +64,20 @@ export type { ErpCalendarEvent, ErpEventAttendee, ErpEventReminder, CreateCalend
 export type { ErpNoteFolder, ErpNote, ErpNoteTag, ErpNoteVersion, ErpNoteShare } from './erp/Note';
 export type { ErpNotification } from './erp/ErpNotification';
 export type { ErpRole, ErpPermissionAction, ErpPermissionOverrideMode, ErpPermissionOverrides } from './erp/Permission';
+
+// Media Auto-Download
+export type { AutoDownloadMode, AutoDownloadExplicit, AutoDownloadPrefs } from './media/autoDownload';
+export {
+    AUTO_DOWNLOAD_SETTINGS_KEY,
+    DEFAULT_AUTO_DOWNLOAD_PREFS,
+    makeThreadAutoDownloadKey,
+    normalizeAutoDownloadPrefs,
+    getAccountAutoDownloadMode,
+    getThreadAutoDownloadMode,
+    resolveEffectiveAccountAutoDownload,
+    resolveEffectiveAutoDownload,
+    withGlobalAutoDownload,
+    withAccountAutoDownload,
+    withThreadAutoDownload,
+    clearThreadAutoDownloadOverrides,
+} from './media/autoDownload';

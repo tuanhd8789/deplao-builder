@@ -22,7 +22,7 @@ import { useQuickErpAccess } from '@/hooks/erp/useQuickErpAccess';
 import { useUpcomingEvents } from '@/hooks/erp/useUpcomingEvents';
 import NotificationCenter from '@/components/erp/notifications/NotificationCenter';
 import { Spinner } from '@/components/common/PageLoading';
-import { AlertIcon, BellOffIcon, KeyIcon, MonitorIcon, PluginIcon, RefreshIcon, StarIcon } from '@/components/common/icons';
+import { AlertIcon, BellOffIcon, BotIcon, KeyIcon, MonitorIcon, PluginIcon, RefreshIcon, StarIcon } from '@/components/common/icons';
 import { useInAppNotifyStore } from '@/store/chat/inAppNotifyStore';
 import { summarizeInAppNotify } from '@/lib/chat/notifications/inAppNotify';
 import FeatureLauncherPanel from './FeatureLauncherPanel';
@@ -49,9 +49,9 @@ const scaleToPx = (s: number) => Math.round(16 * s);
 
 export default function TopBar() {
   const [isMaximized, setIsMaximized] = useState(false);
-  const { theme, setTheme, showNotification, fontSizeScale, setFontSizeScale } = useAppStore(useShallow(s => ({
+  const { theme, setTheme, showNotification, fontSizeScale, setFontSizeScale, view, setView, showAIQuickPanel, toggleAIQuickPanel } = useAppStore(useShallow(s => ({
     theme: s.theme, setTheme: s.setTheme, showNotification: s.showNotification, fontSizeScale: s.fontSizeScale,
-    setFontSizeScale: s.setFontSizeScale,
+    setFontSizeScale: s.setFontSizeScale, view: s.view, setView: s.setView, showAIQuickPanel: s.showAIQuickPanel, toggleAIQuickPanel: s.toggleAIQuickPanel,
   })));
   const { activeAccountId, accounts } = useAccountStore(useShallow(s => ({
     activeAccountId: s.activeAccountId, accounts: s.accounts,
@@ -824,6 +824,28 @@ export default function TopBar() {
         {/* Sync messages from phone (Zalo) - hidden for employees */}
         {empMode !== 'employee' && <FacebookSyncButton />}
         {empMode !== 'employee' && <MobileSyncButton />}
+
+        {/* Global AI Quick Chat toggle */}
+        <button
+          onClick={() => {
+            if (view === 'ai') {
+              setView('chat');
+            } else {
+              toggleAIQuickPanel();
+            }
+          }}
+          className={`h-9 px-2.5 flex items-center gap-1.5 text-xs font-medium transition-colors rounded-md ${
+            (showAIQuickPanel && view !== 'ai') || view === 'ai'
+              ? 'text-purple-400 bg-purple-500/15'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          }`}
+          title={tr('Trợ lý AI nhanh (Ctrl+Shift+A)')}
+          aria-label={tr('Trợ lý AI nhanh')}
+          aria-pressed={showAIQuickPanel && view !== 'ai'}
+        >
+          <BotIcon className="w-4 h-4" />
+          <span className="hidden md:inline">AI</span>
+        </button>
 
         {/* Global feature launcher */}
         <button

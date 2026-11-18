@@ -3,6 +3,7 @@ import { create } from 'zustand';
 export type FeatureVisibilityKey =
   | 'dashboard'
   | 'chat'
+  | 'ai'
   | 'crm'
   | 'workflow'
   | 'integration'
@@ -16,6 +17,7 @@ const STORAGE_KEY = 'deplao:sidebar-feature-visibility';
 const DEFAULT_VISIBILITY: Record<FeatureVisibilityKey, boolean> = {
   dashboard: true,
   chat: true,
+  ai: true,
   crm: true,
   workflow: true,
   integration: true,

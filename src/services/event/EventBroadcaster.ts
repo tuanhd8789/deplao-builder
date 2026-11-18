@@ -6,6 +6,7 @@ import { ZALO_PINNED_MESSAGE_TOPIC } from '../../shared/zalo/zaloMessagePins';
 import { normalizeZaloMessageImages } from '../../utils/zalo/zaloImageUrl';
 import DatabaseService from '../database/DatabaseService';
 import { groupEventActorId, groupEventActorText, profileFromUserInfo } from '../../shared/zalo/zaloGroupEventActor';
+import AutoDownloadPolicyService from '../file/AutoDownloadPolicyService';
 import FileStorageService from '../file/FileStorageService';
 import { groupAdminRole, groupOwnerRole } from '../../shared/chat/groupMemberRoles';
 import { zaloReactionIconToEmoji } from '../../shared/zalo/zaloReactions';
@@ -726,7 +727,11 @@ class EventBroadcaster {
             // from Zalo CDN even for relayed messages, otherwise the Boss's
             // /api/media/ endpoint can't serve the file to employees.
             const SKIP_DOWNLOAD_MSG_TYPES = ['chat.ecard', 'group.poll'];
-            const shouldSkipDownload = SKIP_DOWNLOAD_MSG_TYPES.includes(rawMsgType);
+            const autoDownloadAllowed = AutoDownloadPolicyService.getInstance().shouldAutoDownload(
+                zaloId,
+                String(message.threadId || ''),
+            );
+            const shouldSkipDownload = SKIP_DOWNLOAD_MSG_TYPES.includes(rawMsgType) || !autoDownloadAllowed;
 
             // Card message (business card): chat.recommended / action contains "recommened"
             const CARD_MSG_TYPES = ['chat.recommended', 'chat.recommend'];

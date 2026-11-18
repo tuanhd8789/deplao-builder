@@ -1,6 +1,7 @@
 import React from 'react';
 import { toLocalMediaUrl } from '@/lib/media/localMedia';
 import ipc from '@/lib/ipc';
+import { useChatStore } from '@/store/chat/chatStore';
 import { claimInlineSound, releaseInlineSound, useInlineAutoplay } from '@/lib/media/inlineAutoplay';
 import { fitMediaBox, getKnownDims, rememberDims, type MediaDims } from '@/lib/chat/media/mediaDims';
 import { isTransferring, useMessageMediaProgress } from '@/lib/media/mediaProgress';
@@ -10,8 +11,8 @@ import { tr } from '../../../../shared/i18n';
 
 interface FBVideoThumbProps {
   videoPath: string;
-  /** Called when user clicks play. If provided, opens inline player instead of external app. */
-  onPlay?: () => void;
+  /** Called when user clicks play. Receives updated msg if downloaded on demand. */
+  onPlay?: (downloadedMsg?: any) => void;
   /** Real size (Telegram): frame follows the video's aspect ratio; portrait video is not cropped, matches the frame before loading. */
   width?: number;
   height?: number;
@@ -171,9 +172,38 @@ export default function FBVideoThumb({ videoPath, onPlay, width, height, dimsMsg
     };
   }, [mediaUrl, noteDims]);
 
-  const handlePlay = (e: React.MouseEvent) => {
+  const handlePlay = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (opening || !videoPath) return;
+    if (opening) return;
+    if (!videoPath) {
+      if (!dimsMsg?.owner_zalo_id || !dimsMsg?.msg_id) return;
+      setOpening(true);
+      try {
+        const res = await ipc.file?.downloadMessageMedia?.({
+          zaloId: String(dimsMsg.owner_zalo_id),
+          msgId: String(dimsMsg.msg_id),
+          threadId: dimsMsg.thread_id ? String(dimsMsg.thread_id) : undefined,
+          kind: 'video',
+        });
+        const lp = res?.localPaths || (res?.localPath ? { file: res.localPath } : null);
+        if (res?.success && lp) {
+          if (dimsMsg.thread_id) {
+            useChatStore.getState().updateMessageLocalPath(
+              String(dimsMsg.owner_zalo_id),
+              String(dimsMsg.thread_id),
+              String(dimsMsg.msg_id),
+              lp,
+            );
+          }
+          const updatedMsg = { ...dimsMsg, local_paths: JSON.stringify(lp) };
+          if (onPlay) onPlay(updatedMsg);
+          else if (res.localPath) await ipc.file?.openPath(res.localPath);
+        }
+      } finally {
+        setOpening(false);
+      }
+      return;
+    }
     // Use inline player callback if provided, otherwise fallback to external app
     if (onPlay) {
       onPlay();

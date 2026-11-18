@@ -130,6 +130,7 @@ export default function FeatureLauncherPanel({ onClose }: FeatureLauncherPanelPr
     // Main destinations — Chat intentionally remains a single node.
     { id: 'dashboard', section: 'Truy cập chính', label: tr('Dashboard'), description: tr('Tổng quan tài khoản, trạng thái kết nối và hoạt động gần đây'), icon: <HomeIcon />, onClick: () => openView('dashboard') },
     { id: 'chat', section: 'Truy cập chính', label: tr('Chat'), description: tr('Hộp thư đa kênh để đọc, tìm kiếm và gửi tin nhắn'), icon: <ChatIcon />, onClick: () => openView('chat') },
+    { id: 'ai-hub', section: 'Truy cập chính', label: tr('Chat Trợ lý AI'), description: tr('Không gian làm việc và hỏi đáp đa năng với các Trợ lý AI'), icon: <BotIcon />, onClick: () => openView('ai') },
 
     // CRM tabs from CRMPage — each is a real tab, not a placeholder.
     { id: 'crm-search', section: 'CRM', label: tr('Tìm kiếm'), description: tr('Tìm liên hệ theo tên, số điện thoại hoặc UID'), icon: <SearchIcon />, onClick: () => openCRM('search') },

@@ -11,10 +11,21 @@ import { v4 as uuidv4 } from 'uuid';
 import DatabaseService from '../database/DatabaseService';
 import IntegrationRegistry from '../integrations/IntegrationRegistry';
 import Logger from '../../utils/Logger';
-import { requestAICompletion } from './AIProviderAdapter';
+import { requestAICompletion, type AIProviderMessage } from './AIProviderAdapter';
+import AIToolService from './AIToolService';
 import { normalizeAIModel } from '../../shared/ai/aiModelCatalog';
 import { normalizeSuggestionCount, parseSuggestionResult, suggestionSystemPrompt } from '../../shared/ai/replySuggestions';
-import type { AIAssistant, AIAssistantFile, ChatMessage, AIPlatform } from '../../models';
+import {
+  normalizeAIToolPermissions,
+  type AIAssistant,
+  type AIAssistantFile,
+  type ChatMessage,
+  type AIPlatform,
+  type AIExecutedToolTrace,
+  type AIPendingToolAction,
+  type AIToolDefinition,
+  type AIToolModule,
+} from '../../models';
 import { tr } from '../../shared/i18n';
 
 // ─── Encryption helpers ───────────────────────────────────────────────────────
@@ -149,15 +160,17 @@ class AIAssistantService {
     const model = normalizeAIModel(data.platform, data.model);
 
     const pinnedJson = data.pinnedProductsJson || '[]';
-    Logger.info(`[AIAssistant] saveAssistant id=${id}, posIntegrationId=${data.posIntegrationId || 'null'}, pinnedProductsJson.length=${pinnedJson.length}, pinnedPreview=${pinnedJson.substring(0, 200)}`);
+    const perms = normalizeAIToolPermissions(data.toolPermissions ?? data.toolPermissionsJson);
+    const toolPermissionsJson = JSON.stringify(perms);
+    Logger.info(`[AIAssistant] saveAssistant id=${id}, posIntegrationId=${data.posIntegrationId || 'null'}, pinnedProductsJson.length=${pinnedJson.length}, toolPerms=${toolPermissionsJson}`);
 
     // If setting as default, unset others
     if (data.isDefault) {
       db.run(`UPDATE ai_assistants SET is_default = 0`);
     }
 
-    db.run(`INSERT INTO ai_assistants (id, name, platform, api_key_encrypted, model, system_prompt, base_url, pos_integration_id, pinned_products_json, max_tokens, temperature, context_message_count, enabled, is_default, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    db.run(`INSERT INTO ai_assistants (id, name, platform, api_key_encrypted, model, system_prompt, base_url, pos_integration_id, pinned_products_json, tool_permissions_json, max_tokens, temperature, context_message_count, enabled, is_default, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
               name = excluded.name, platform = excluded.platform,
               api_key_encrypted = CASE WHEN excluded.api_key_encrypted = '***' THEN ai_assistants.api_key_encrypted ELSE excluded.api_key_encrypted END,
@@ -165,6 +178,7 @@ class AIAssistantService {
               base_url = excluded.base_url,
               pos_integration_id = excluded.pos_integration_id,
               pinned_products_json = excluded.pinned_products_json,
+              tool_permissions_json = excluded.tool_permissions_json,
               max_tokens = excluded.max_tokens, temperature = excluded.temperature,
               context_message_count = excluded.context_message_count,
               enabled = excluded.enabled, is_default = excluded.is_default,
@@ -174,11 +188,13 @@ class AIAssistantService {
         data.systemPrompt || '', data.baseUrl || null,
         data.posIntegrationId || null,
         pinnedJson,
+        toolPermissionsJson,
         data.maxTokens || 1000, data.temperature ?? 0.7,
         data.contextMessageCount || 30,
         data.enabled !== false ? 1 : 0, data.isDefault ? 1 : 0,
         data.id ? now : now, now,
       ]);
+    db.save();
 
     // Verify save: read back and check pinned_products_json
     try {
@@ -316,6 +332,36 @@ VÍ DỤ ĐẦU RA ĐÚNG:
 ]
 
 5. KHÔNG BAO GIỜ trả về text thường. LUÔN LUÔN trả về JSON array như trên.`);
+    } else {
+      const nowStr = new Date().toLocaleString('vi-VN', { hour12: false });
+      const perms = normalizeAIToolPermissions(assistant.toolPermissions ?? assistant.toolPermissionsJson);
+      const moduleLabels: Record<AIToolModule, string> = {
+        messaging: 'Tin nhắn & Hội thoại',
+        crm: 'CRM (Khách hàng, Nhãn, Ghi chú, Chiến dịch)',
+        hrm: 'Phòng ban, Chức vụ & Nhân sự (HRM)',
+        tasks: 'Dự án & Công việc (Tasks, Checklist, Bình luận)',
+        calendar_notes: 'Lịch hẹn & Ghi chú ERP',
+        reports: 'Tóm tắt & Báo cáo công việc',
+        pos: 'Tra cứu POS / Đơn hàng',
+      };
+      const accessLabel = (lvl: 'off' | 'read' | 'write') =>
+        lvl === 'write' ? 'Tạo, Đọc & Sửa' : lvl === 'read' ? 'Chỉ đọc' : 'Đã tắt';
+      const permSummary = (Object.keys(moduleLabels) as AIToolModule[])
+        .map(m => `  + ${moduleLabels[m]}: ${accessLabel(perms[m])}`)
+        .join('\n');
+
+      parts.push(`
+
+[HƯỚNG DẪN TRỢ LÝ NỘI BỘ DEPLAO]
+- Thời gian hiện tại trên máy người dùng: ${nowStr}.
+- Bạn đang trò chuyện trực tiếp với nhân viên/chủ shop bên trong ứng dụng Deplao (KHÔNG gửi trực tiếp cho khách trừ khi người dùng duyệt thẻ xác nhận).
+- Hãy trình bày rõ ràng, chuyên nghiệp bằng Markdown chuẩn (tiêu đề, danh sách, **in đậm** ý chính, bảng Markdown khi so sánh hoặc tổng hợp nhiều mục, code block khi đưa mẫu câu hoặc dữ liệu).
+- QUY TẮC BẢO VỆ DỮ LIỆU (BẮT BUỘC): Hệ thống CHẶN TUYỆT ĐỐI quyền XÓA đối với AI. Bạn CHỈ được phép Tạo mới (Create), Đọc (Read), Sửa/Cập nhật (Update) trong đúng phạm vi phân hệ được cấp quyền dưới đây — KHÔNG BAO GIỜ xóa phòng ban, chức vụ, nhân sự, dự án, công việc, lịch hẹn, ghi chú, khách hàng, nhãn hay chiến dịch. Nếu người dùng yêu cầu xóa dữ liệu, hãy từ chối lịch sự theo chính sách an toàn dữ liệu và hướng dẫn họ tự xóa thủ công trên giao diện Deplao.
+- Phân quyền tính năng hiện tại của bạn:
+${permSummary}
+- Cách dùng công cụ:
+  + Chủ động gọi các tool Đọc (\`list_org_structure\`, \`list_projects_and_tasks\`, \`generate_work_report\`, \`lookup_crm_contacts\`, \`list_crm_tags_and_campaigns\`, \`list_calendar_and_notes\`, \`query_messages\`, v.v.) để lấy dữ liệu và ID thật trước khi tổng hợp báo cáo hoặc đề xuất cập nhật.
+  + Khi người dùng yêu cầu tạo nhiều phòng ban, nhiều chức vụ hoặc nhiều công việc cùng lúc, ưu tiên gộp vào tham số mảng \`items\` (hoặc gọi các tool Tạo/Sửa tương ứng) để hệ thống hiển thị thẻ xác nhận cho người dùng bấm duyệt một lần.`);
     }
 
     return parts.join('\n');
@@ -326,10 +372,11 @@ VÍ DỤ ĐẦU RA ĐÚNG:
    */
   private async callLLM(
     assistant: AIAssistant,
-    messages: ChatMessage[],
+    messages: AIProviderMessage[],
     maxTokensOverride?: number,
     temperatureOverride?: number,
-  ): Promise<{ result: string; totalTokens: number; promptTokens: number; completionTokens: number }> {
+    tools?: AIToolDefinition[],
+  ): Promise<{ result: string; totalTokens: number; promptTokens: number; completionTokens: number; toolCalls?: any[] }> {
     const maxTokens = maxTokensOverride || assistant.maxTokens || 1000;
     const temperature = typeof temperatureOverride === 'number' && Number.isFinite(temperatureOverride)
       ? temperatureOverride
@@ -338,12 +385,13 @@ VÍ DỤ ĐẦU RA ĐÚNG:
 
     // Debug: log request info
     const keyPreview = assistant.apiKey ? `${assistant.apiKey.substring(0, 8)}...${assistant.apiKey.substring(assistant.apiKey.length - 4)}` : '(empty)';
-    Logger.info(`[AIAssistant] callLLM → platform=${assistant.platform}, model=${model}${model !== assistant.model ? ` (normalized from ${assistant.model})` : ''}, keyPreview=${keyPreview}, maxTokens=${maxTokens}`);
+    Logger.info(`[AIAssistant] callLLM → platform=${assistant.platform}, model=${model}${model !== assistant.model ? ` (normalized from ${assistant.model})` : ''}, keyPreview=${keyPreview}, maxTokens=${maxTokens}, tools=${tools?.length || 0}`);
 
     let result = '';
     let promptTokens = 0;
     let completionTokens = 0;
     let totalTokens = 0;
+    let toolCalls: any[] | undefined;
 
     try {
       const response = await requestAICompletion({
@@ -354,11 +402,13 @@ VÍ DỤ ĐẦU RA ĐÚNG:
         maxTokens,
         temperature,
         baseUrl: assistant.baseUrl,
+        tools,
       });
       result = response.result;
       promptTokens = response.promptTokens;
       completionTokens = response.completionTokens;
       totalTokens = response.totalTokens;
+      toolCalls = response.toolCalls;
     } catch (err: any) {
       // Enhanced error logging
       const status = err.response?.status;
@@ -371,12 +421,12 @@ VÍ DỤ ĐẦU RA ĐÚNG:
     // Log usage to DB
     try {
       this.logUsage(assistant.id, assistant.name, assistant.platform, assistant.model,
-        messages.map(m => m.content).join('\n---\n').substring(0, 5000),
-        result.substring(0, 5000),
+        messages.map(m => m.content || '').join('\n---\n').substring(0, 5000),
+        (result || JSON.stringify(toolCalls || '')).substring(0, 5000),
         promptTokens, completionTokens, totalTokens);
     } catch {}
 
-    return { result, totalTokens, promptTokens, completionTokens };
+    return { result, totalTokens, promptTokens, completionTokens, toolCalls };
   }
 
   // ─── Public AI methods ──────────────────────────────────────────────────
@@ -432,6 +482,146 @@ VÍ DỤ ĐẦU RA ĐÚNG:
     ];
 
     return await this.callLLM(assistant, messages, maxTokensOverride);
+  }
+
+  /**
+   * Internal AI chat with rich Markdown formatting + native Tool Calling loop.
+   * Auto-executes Read tools (up to 5 rounds) and returns Write tools as `pendingActions` for user confirmation.
+   */
+  public async chatWithTools(params: {
+    assistantId: string;
+    messages: Array<{ role: string; content: string }>;
+    enableTools?: boolean;
+    contextBlock?: string;
+    maxTokensOverride?: number;
+  }): Promise<{
+    result: string;
+    totalTokens: number;
+    promptTokens: number;
+    completionTokens: number;
+    executedTools: AIExecutedToolTrace[];
+    pendingActions: AIPendingToolAction[];
+  }> {
+    const assistant = this.getAssistant(params.assistantId);
+    if (!assistant) throw new Error(tr('Trợ lý AI không tồn tại'));
+    if (!assistant.enabled) throw new Error(tr('Trợ lý AI đã bị tắt'));
+
+    const systemPrompt = await this.buildSystemPrompt(assistant, false);
+    const messages: AIProviderMessage[] = [{ role: 'system', content: systemPrompt }];
+    if (params.contextBlock?.trim()) {
+      messages.push(
+        { role: 'user', content: params.contextBlock.trim() },
+        { role: 'assistant', content: 'Đã tiếp nhận ngữ cảnh hội thoại được lọc. Tôi sẵn sàng phân tích và trả lời câu hỏi của bạn.' },
+      );
+    }
+    for (const m of params.messages || []) {
+      if (!m || typeof m.content !== 'string' || !m.content.trim()) continue;
+      messages.push({
+        role: m.role === 'assistant' ? 'assistant' : 'user',
+        content: m.content,
+      });
+    }
+
+    const assistantPerms = normalizeAIToolPermissions(assistant.toolPermissions ?? assistant.toolPermissionsJson);
+    const allowedTools = params.enableTools === false ? [] : AIToolService.getToolDefinitions(assistantPerms);
+    const tools = allowedTools.length > 0 ? allowedTools : undefined;
+    const maxTokens = params.maxTokensOverride || Math.max(assistant.maxTokens || 1000, 4096);
+
+    const executedTools: AIExecutedToolTrace[] = [];
+    const pendingActions: AIPendingToolAction[] = [];
+    let totalPrompt = 0;
+    let totalCompletion = 0;
+    let totalAll = 0;
+    let finalResult = '';
+
+    for (let round = 0; round < 5; round++) {
+      const res = await this.callLLM(assistant, messages, maxTokens, undefined, tools);
+      totalPrompt += res.promptTokens || 0;
+      totalCompletion += res.completionTokens || 0;
+      totalAll += res.totalTokens || 0;
+
+      const calls = res.toolCalls || [];
+      if (!calls.length) {
+        finalResult = res.result || '';
+        break;
+      }
+
+      messages.push({
+        role: 'assistant',
+        content: res.result || '',
+        toolCalls: calls,
+      });
+
+      let hasWriteCall = false;
+      for (const tc of calls) {
+        const permCheck = AIToolService.canExecuteTool(tc.name, assistantPerms);
+        if (!permCheck.allowed) {
+          messages.push({
+            role: 'tool',
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: JSON.stringify({
+              status: 'denied',
+              error: permCheck.reason || 'Công cụ này không được cấp quyền cho trợ lý AI hiện tại.',
+            }),
+          });
+          continue;
+        }
+        if (AIToolService.isWriteTool(tc.name)) {
+          hasWriteCall = true;
+          const pending = AIToolService.buildPendingAction(tc, assistant.id);
+          pendingActions.push(pending);
+          messages.push({
+            role: 'tool',
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: JSON.stringify({
+              status: 'pending_user_confirmation',
+              actionTitle: pending.title,
+              message: 'Thẻ xác nhận đã được hiển thị trên giao diện. Hãy thông báo ngắn gọn để người dùng bấm Xác nhận thực hiện.',
+            }),
+          });
+        } else {
+          const toolRes = await AIToolService.executeReadTool(tc.name, tc.arguments, assistantPerms);
+          executedTools.push({
+            id: tc.id,
+            name: tc.name,
+            label: AIToolService.getToolLabel(tc.name),
+            args: tc.arguments || {},
+            summary: toolRes.summary,
+          });
+          const payloadStr = JSON.stringify(toolRes.data);
+          messages.push({
+            role: 'tool',
+            toolCallId: tc.id,
+            toolName: tc.name,
+            content: payloadStr.length > 30000 ? payloadStr.slice(0, 30000) + '...(truncated)' : payloadStr,
+          });
+        }
+      }
+
+      // On the last loop round or if model already produced text alongside write-only calls, let it summarize once more
+      if (round === 4 && !finalResult) {
+        const finalRes = await this.callLLM(assistant, messages, maxTokens, undefined, undefined);
+        totalPrompt += finalRes.promptTokens || 0;
+        totalCompletion += finalRes.completionTokens || 0;
+        totalAll += finalRes.totalTokens || 0;
+        finalResult = finalRes.result || (hasWriteCall ? 'Đã chuẩn bị các hành động đề xuất bên dưới để bạn xác nhận.' : '');
+      }
+    }
+
+    if (!finalResult && pendingActions.length > 0) {
+      finalResult = 'Mình đã chuẩn bị các đề xuất thao tác bên dưới — bạn kiểm tra và bấm **Xác nhận** để thực hiện nhé.';
+    }
+
+    return {
+      result: finalResult,
+      totalTokens: totalAll,
+      promptTokens: totalPrompt,
+      completionTokens: totalCompletion,
+      executedTools,
+      pendingActions,
+    };
   }
 
   /**
@@ -606,6 +796,7 @@ VÍ DỤ ĐẦU RA ĐÚNG:
         );
       } catch {}
     }
+    const toolPermissions = normalizeAIToolPermissions(row.tool_permissions_json);
     return {
       id: row.id,
       name: row.name,
@@ -621,6 +812,8 @@ VÍ DỤ ĐẦU RA ĐÚNG:
       contextMessageCount: row.context_message_count || 30,
       enabled: row.enabled === 1,
       isDefault: row.is_default === 1,
+      toolPermissionsJson: JSON.stringify(toolPermissions),
+      toolPermissions,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

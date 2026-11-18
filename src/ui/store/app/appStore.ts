@@ -12,7 +12,7 @@ import {
 } from '@/lib/chat/composer/aiReplySuggestions';
 import { tr } from '../../../shared/i18n';
 
-type AppView = 'chat' | 'friends' | 'settings' | 'dashboard' | 'crm' | 'workflow' | 'integration' | 'analytics' | 'erp' | 'plugin';
+type AppView = 'chat' | 'ai' | 'friends' | 'settings' | 'dashboard' | 'crm' | 'workflow' | 'integration' | 'analytics' | 'erp' | 'plugin';
 export type AppTheme = 'dark' | 'light';
 
 export interface GroupMember {
@@ -115,6 +115,7 @@ interface AppStore {
   aiSuggestCount: number;
   aiAutoInjectZaloContext: boolean;
   aiQuickPanelContextCountOverride: number | null;
+  aiToolsEnabled: boolean;
   /** Cache: threadKey → last used assistantId for AI Quick Panel */
   aiThreadAssistantMap: Record<string, string>;
   /** Threads where AI suggestion is disabled: Set of "zaloId_threadId" */
@@ -179,6 +180,7 @@ interface AppStore {
   setAiSuggestCount: (count: number) => void;
   setAiAutoInjectZaloContext: (enabled: boolean) => void;
   setAiQuickPanelContextCountOverride: (count: number | null) => void;
+  setAiToolsEnabled: (enabled: boolean) => void;
   setAiThreadAssistant: (threadKey: string, assistantId: string) => void;
   toggleAiDisableForThread: (zaloId: string, threadId: string) => void;
   toggleAiDisableForAccount: (zaloId: string) => void;
@@ -418,6 +420,13 @@ function loadAiThreadAssistantMap(): Record<string, string> {
   } catch {}
   return {};
 }
+function loadAiToolsEnabled(): boolean {
+  try {
+    const stored = localStorage.getItem('ai_tools_enabled');
+    return stored === null ? true : stored === 'true';
+  } catch {}
+  return true;
+}
 
 // ─── Helper: write flag to DB via IPC (fire-and-forget) ─────────────────────
 /**
@@ -470,6 +479,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   aiSuggestCount: loadAiSuggestCount(),
   aiAutoInjectZaloContext: loadAiAutoInjectZaloContext(),
   aiQuickPanelContextCountOverride: loadAiQuickPanelContextCountOverride(),
+  aiToolsEnabled: loadAiToolsEnabled(),
   aiThreadAssistantMap: loadAiThreadAssistantMap(),
   aiSuggestDisabledThreads: loadAiDisabledThreads(),
   aiSuggestDisabledAccounts: loadAiDisabledAccounts(),
@@ -586,6 +596,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
       else localStorage.setItem('ai_quick_panel_context_count_override', String(normalized));
     } catch {}
     set({ aiQuickPanelContextCountOverride: normalized });
+  },
+  setAiToolsEnabled: (enabled) => {
+    try { localStorage.setItem('ai_tools_enabled', String(enabled)); } catch {}
+    set({ aiToolsEnabled: enabled });
   },
   setAiThreadAssistant: (threadKey, assistantId) => {
     set((s) => {

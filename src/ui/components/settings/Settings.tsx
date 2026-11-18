@@ -31,6 +31,7 @@ import AutoLaunchSettings from './notifications/AutoLaunchSettings';
 import LogViewer from './logs/LogViewer';
 import CloudSettings, { type CloudSection } from './cloud/CloudSettings';
 import CloudMediaSummary from './cloud/CloudMediaSummary';
+import AutoDownloadSettingsSection from './storage/AutoDownloadSettings';
 import { toCloudSection } from './cloud/cloudUi';
 import { useCloudAlert } from './cloud/useCloudAlert';
 import { loadSeenTabs, markTabSeen, SETTINGS_WATCHLIST, hasUnseenChangelog, markChangelogSeen } from '@/lib/app/settingsSeenTabs';
@@ -720,6 +721,7 @@ function StoragePage({
             control={<span className="text-sm font-medium text-foreground">{mediaCacheSize > 0 ? formatBytes(mediaCacheSize) : tr('Đang tính...')}</span>}
           />
         </SettingsSection>
+        <AutoDownloadSettingsSection />
       </SettingsPage>
     );
   }
@@ -767,6 +769,9 @@ function StoragePage({
           )}
         </SettingsRow>
       </SettingsSection>
+
+      {/* Auto-download attachments policy (Global app / Account / Conversation) */}
+      <AutoDownloadSettingsSection />
 
       {/* Cloud media (Cloudflare R2 / Google Drive), server only, app builds with the Cloudflare module */}
       <CloudMediaSummary />

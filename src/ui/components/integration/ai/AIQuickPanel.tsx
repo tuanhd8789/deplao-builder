@@ -1,8 +1,10 @@
 /**
  * AIQuickPanel.tsx
- * Side panel for chatting directly with the AI - shown on the right of the chat window.
- * Lets you pick an assistant, ask questions, and insert an answer into MessageInput.
- * Automatically injects the current Zalo conversation context when a question is sent.
+ * Docked / Global side panel for chatting with AI across the entire Deplao app.
+ * - Works both inside a conversation (auto-injects up to 1000 thread messages) AND globally
+ *   across Dashboard, CRM, ERP, Workflow, Analytics, Settings, etc.
+ * - Supports multi-dimensional context filter (time range, threads, labels/tags, 1-1/group, senders).
+ * - Renders Markdown (tables, code blocks, lists) + Tool Calling traces + Confirmation Cards.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ipc from '@/lib/ipc';
@@ -11,15 +13,35 @@ import { useChatStore } from '@/store/chat/chatStore';
 import { useAccountStore } from '@/store/accounts/accountStore';
 import { useAppStore } from '@/store/app/appStore';
 import { parseStructuredResponse } from '../../../../shared/ai/aiUtils';
-import { BotIcon, ClipboardListIcon, DiamondIcon, EditIcon, FileTextIcon, HelpCircleIcon, LightningIcon, SparklesIcon, StarIcon, TargetIcon } from '@/components/common/icons';
+import type {
+  AIChatMessageMetadata,
+  AIContextFilter,
+  AIExecutedToolTrace,
+  AIPendingToolAction,
+} from '../../../../models/ai/ai';
+import AIMarkdownRenderer from './AIMarkdownRenderer';
+import { ExecutedToolsBadge, PendingActionList } from './AIToolCards';
+import AIContextFilterPanel, { summarizeContextFilter } from './AIContextFilterPanel';
+import {
+  BotIcon,
+  ClipboardListIcon,
+  EditIcon,
+  FileTextIcon,
+  HelpCircleIcon,
+  LightningIcon,
+  SparklesIcon,
+  TrashIcon,
+  WrenchIcon,
+} from '@/components/common/icons';
 import { tr } from '../../../../shared/i18n';
 import { trx } from '@/lib/i18n/trx';
 
-
 interface ChatMsg {
+  dbId?: number;
   role: 'user' | 'assistant';
   content: string;
-  segments?: Array<{ type: 'text' | 'image'; content: any }>; // Parsed structured JSON segments
+  segments?: Array<{ type: 'text' | 'image'; content: any }>;
+  meta?: AIChatMessageMetadata;
 }
 
 interface AssistantSummary {
@@ -32,15 +54,16 @@ interface AssistantSummary {
   contextMessageCount?: number;
 }
 
-const PLATFORM_ICONS: Record<string, React.ReactNode> = {
-  openai: <BotIcon className="w-4 h-4" />,
-  gemini: <SparklesIcon className="w-4 h-4" />,
-  deepseek: <HelpCircleIcon className="w-4 h-4" />,
-  grok: <LightningIcon className="w-4 h-4" />,
-};
-// Text fallback for use in <option> elements (cannot render JSX)
+interface SessionItem {
+  id: string;
+  title?: string;
+  assistant_id: string;
+  last_message_at: number;
+  context_filter_json?: string | null;
+}
+
 const PLATFORM_ICON_TEXTS: Record<string, string> = {
-  openai: '[AI]', gemini: '[G]', deepseek: '[DS]', grok: '[Grok]',
+  openai: '[AI]', gemini: '[G]', claude: '[C]', deepseek: '[DS]', grok: '[Grok]', mistral: '[M]', '9router': '[9R]', openrouter: '[OR]',
 };
 
 const clampContextCount = (value: number) => Math.min(1000, Math.max(1, Math.round(value)));
@@ -49,27 +72,67 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
   const [assistants, setAssistants] = useState<AssistantSummary[]>([]);
   const [activeId, setActiveId] = useState<string>('');
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingAssistants, setLoadingAssistants] = useState(true);
   const [assistantContextMsgCount, setAssistantContextMsgCount] = useState(30);
-  const [contextCountInput, setContextCountInput] = useState('30');
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { activeThreadId } = useChatStore();
   const { activeAccountId } = useAccountStore();
   const {
+    view,
+    setView,
     aiAutoInjectZaloContext,
     setAiAutoInjectZaloContext,
     aiQuickPanelContextCountOverride,
     setAiQuickPanelContextCountOverride,
+    aiToolsEnabled,
+    setAiToolsEnabled,
     aiThreadAssistantMap,
     setAiThreadAssistant,
   } = useAppStore();
 
-  // Load assistants + restore cached assistant for current thread
+  const isThreadView = view === 'chat' && !!(activeAccountId && activeThreadId);
+  const scopeZaloId = isThreadView ? activeAccountId! : '__global__';
+  const scopeThreadId = isThreadView ? activeThreadId! : '__panel__';
+
+  const effectiveContextMsgCount = aiQuickPanelContextCountOverride ?? assistantContextMsgCount;
+
+  const [contextFilter, setContextFilter] = useState<AIContextFilter>(() => ({
+    enabled: aiAutoInjectZaloContext,
+    mode: isThreadView ? (aiAutoInjectZaloContext ? 'current_thread' : 'off') : 'off',
+    timePreset: '7d',
+    threadType: 'all',
+    limit: effectiveContextMsgCount,
+  }));
+
+  // Keep contextFilter mode aligned when switching between Chat thread and Global view
+  useEffect(() => {
+    setContextFilter(prev => {
+      if (prev.mode === 'custom_filter') return prev;
+      if (isThreadView) {
+        return {
+          ...prev,
+          enabled: aiAutoInjectZaloContext,
+          mode: aiAutoInjectZaloContext ? 'current_thread' : 'off',
+          limit: effectiveContextMsgCount,
+        };
+      }
+      return {
+        ...prev,
+        enabled: false,
+        mode: 'off',
+      };
+    });
+  }, [isThreadView, aiAutoInjectZaloContext, effectiveContextMsgCount]);
+
+  // Load assistants + restore cached assistant
   useEffect(() => {
     (async () => {
       setLoadingAssistants(true);
@@ -78,10 +141,9 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
         if (res?.success) {
           const enabled = (res.assistants || []).filter((a: AssistantSummary) => a.enabled);
           setAssistants(enabled);
-          // Restore cached assistant for current thread, fallback to default
-          const threadKey = activeAccountId && activeThreadId ? `${activeAccountId}_${activeThreadId}` : '';
-          const cachedId = threadKey ? aiThreadAssistantMap[threadKey] : '';
-          const cached = cachedId ? enabled.find(a => a.id === cachedId) : null;
+          const threadKey = isThreadView ? `${activeAccountId}_${activeThreadId}` : '__global__';
+          const cachedId = aiThreadAssistantMap[threadKey] || '';
+          const cached = cachedId ? enabled.find((a: AssistantSummary) => a.id === cachedId) : null;
           const def = cached || enabled.find((a: AssistantSummary) => a.isDefault) || enabled[0];
           if (def) setActiveId(def.id);
         }
@@ -93,21 +155,52 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
   // Auto scroll
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, loading]);
 
-  // Load conversation when thread OR assistant changes
+  const loadMessagesForConversation = useCallback(async (convId: string) => {
+    try {
+      const msgRes = await ipc.ai?.getConversationMessages({ conversationId: convId });
+      if (msgRes?.success && msgRes.messages?.length > 0) {
+        const loaded: ChatMsg[] = msgRes.messages.map((m: any) => ({
+          dbId: m.id,
+          role: m.role,
+          content: m.content,
+          segments: m.segments_json ? JSON.parse(m.segments_json) : undefined,
+          meta: m.metadata_json ? JSON.parse(m.metadata_json) : undefined,
+        }));
+        setMessages(loaded);
+      } else {
+        setMessages([]);
+      }
+    } catch {
+      setMessages([]);
+    }
+  }, []);
+
+  const refreshSessions = useCallback(async () => {
+    if (!ipc.ai?.listAllConversations) return;
+    try {
+      const res = await ipc.ai.listAllConversations({
+        zaloId: scopeZaloId,
+        threadId: scopeThreadId,
+        assistantId: activeId || undefined,
+        limit: 30,
+      });
+      if (res?.success) setSessions(res.conversations || []);
+    } catch {}
+  }, [scopeZaloId, scopeThreadId, activeId]);
+
+  // Load conversation when scope OR assistant changes
   useEffect(() => {
-    if (!activeAccountId || !activeThreadId || !activeId) {
+    if (!activeId) {
       setMessages([]);
       setConversationId(null);
       return;
     }
 
-    // Cache assistant selection for this thread
-    const threadKey = `${activeAccountId}_${activeThreadId}`;
+    const threadKey = isThreadView ? `${activeAccountId}_${activeThreadId}` : '__global__';
     setAiThreadAssistant(threadKey, activeId);
 
-    // Fetch contextMessageCount for this assistant
     const currentAssistant = assistants.find(a => a.id === activeId);
     const initialDefault = clampContextCount(currentAssistant?.contextMessageCount || 30);
     setAssistantContextMsgCount(initialDefault);
@@ -120,22 +213,16 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
         }
       } catch {}
 
-      // Load conversation from DB
       try {
-        const convRes = await ipc.ai?.getOrCreateConversation({ zaloId: activeAccountId, threadId: activeThreadId, assistantId: activeId });
+        const convRes = await ipc.ai?.getOrCreateConversation({
+          zaloId: scopeZaloId,
+          threadId: scopeThreadId,
+          assistantId: activeId,
+          scope: isThreadView ? 'thread' : 'panel',
+        });
         if (convRes?.success && convRes.conversation) {
           setConversationId(convRes.conversation.id);
-          const msgRes = await ipc.ai?.getConversationMessages({ conversationId: convRes.conversation.id });
-          if (msgRes?.success && msgRes.messages?.length > 0) {
-            const loaded: ChatMsg[] = msgRes.messages.map((m: any) => ({
-              role: m.role,
-              content: m.content,
-              segments: m.segments_json ? JSON.parse(m.segments_json) : undefined,
-            }));
-            setMessages(loaded);
-          } else {
-            setMessages([]);
-          }
+          await loadMessagesForConversation(convRes.conversation.id);
         } else {
           setConversationId(null);
           setMessages([]);
@@ -144,30 +231,24 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
         setConversationId(null);
         setMessages([]);
       }
+      refreshSessions();
     })();
-  }, [activeId, activeThreadId, activeAccountId, assistants]);
+  }, [activeId, scopeZaloId, scopeThreadId, assistants, isThreadView]);
 
-  const effectiveContextMsgCount = aiQuickPanelContextCountOverride ?? assistantContextMsgCount;
-  const isUsingAssistantDefaultContext = aiQuickPanelContextCountOverride === null;
-
-  useEffect(() => {
-    setContextCountInput(String(effectiveContextMsgCount));
-  }, [effectiveContextMsgCount]);
-
-  /** Get the current Zalo conversation context (returns null if there is none) */
-  const getRawZaloChatContext = useCallback(async (): Promise<string | null> => {
-    if (!activeAccountId || !activeThreadId) return null;
+  /** Fetch context from current active thread (up to 1000 messages from DB) */
+  const getCurrentThreadContext = useCallback(async (limitCount: number): Promise<{ text: string | null; summary: string }> => {
+    if (!activeAccountId || !activeThreadId) return { text: null, summary: '' };
     const key = `${activeAccountId}_${activeThreadId}`;
     let msgs: any[] = useChatStore.getState().messages[key] || [];
-    // The store only keeps a few recently loaded messages: fetch more from DB when needed
-    if (msgs.length < effectiveContextMsgCount) {
+    const targetLimit = clampContextCount(limitCount);
+
+    if (msgs.length < targetLimit) {
       try {
-        // The IPC layer caps each page (<=200), so page backwards with a `before` cursor until we have enough.
         const PAGE = 100;
         const seen = new Set<string>();
         const all: any[] = [];
         let before: number | undefined;
-        for (let i = 0; i < 40 && all.length < effectiveContextMsgCount; i++) {
+        for (let i = 0; i < 40 && all.length < targetLimit; i++) {
           const res: any = await DataAccessor.getMessages({
             zaloId: activeAccountId, threadId: activeThreadId, limit: PAGE, offset: 0, ...(before ? { before } : {}),
           });
@@ -186,26 +267,64 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
         if (all.length > msgs.length) msgs = all.reverse();
       } catch {}
     }
-    const recent = msgs.slice(-effectiveContextMsgCount);
-    if (recent.length === 0) return null;
+
+    const recent = msgs.slice(-targetLimit);
+    if (recent.length === 0) return { text: null, summary: '' };
+    const pad = (n: number) => String(n).padStart(2, '0');
     const contextText = recent.map((m: any) => {
       const content = typeof m.content === 'string'
         ? m.content
         : (m.content?.msg || JSON.stringify(m.content));
       const ts = Number(m.timestamp);
       const d = Number.isFinite(ts) && ts > 0 ? new Date(ts < 1e12 ? ts * 1000 : ts) : null;
-      const pad = (n: number) => String(n).padStart(2, '0');
       const time = d ? `[${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}] ` : '';
       const who = m.is_sent ? 'Tôi' : (m.sender_name || (m.sender_id ? `Khách ${m.sender_id}` : 'Khách'));
       return `${time}${who}: ${content}`;
     }).join('\n');
-    return contextText || null;
-  }, [activeAccountId, activeThreadId, effectiveContextMsgCount]);
+    return {
+      text: contextText ? `[Ngữ cảnh hội thoại hiện tại - ${recent.length} tin nhắn gần nhất]\n${contextText}` : null,
+      summary: `${recent.length} tin từ hội thoại hiện tại`,
+    };
+  }, [activeAccountId, activeThreadId]);
 
-  const getZaloChatContext = useCallback(async (): Promise<string | null> => {
-    if (!aiAutoInjectZaloContext) return null;
-    return getRawZaloChatContext();
-  }, [aiAutoInjectZaloContext, getRawZaloChatContext]);
+  /** Resolve context according to active AIContextFilter */
+  const resolveContextBlock = useCallback(async (forceOn = false): Promise<{ block: string | undefined; summary: string }> => {
+    const effectiveMode = contextFilter.mode || (isThreadView ? 'current_thread' : 'off');
+    if (!forceOn && (effectiveMode === 'off' || contextFilter.enabled === false)) {
+      return { block: undefined, summary: '' };
+    }
+
+    if (effectiveMode === 'custom_filter') {
+      try {
+        const res = await ipc.ai?.queryContextMessages?.(contextFilter);
+        if (res?.success && res.formattedContext) {
+          const summary = `${res.count} tin / ${res.threadCount} hội thoại`;
+          return {
+            block: `[Ngữ cảnh tin nhắn đã lọc (${summary})]\n${res.formattedContext}`,
+            summary,
+          };
+        }
+      } catch {}
+      return { block: undefined, summary: '' };
+    }
+
+    if (isThreadView) {
+      const limit = contextFilter.limit || effectiveContextMsgCount;
+      const cur = await getCurrentThreadContext(limit);
+      return { block: cur.text || undefined, summary: cur.summary };
+    }
+    return { block: undefined, summary: '' };
+  }, [contextFilter, isThreadView, effectiveContextMsgCount, getCurrentThreadContext]);
+
+  const handleFilterChange = useCallback((next: AIContextFilter) => {
+    setContextFilter(next);
+    if (next.mode === 'current_thread') {
+      setAiAutoInjectZaloContext(true);
+      if (next.limit) setAiQuickPanelContextCountOverride(next.limit);
+    } else if (next.mode === 'off') {
+      setAiAutoInjectZaloContext(false);
+    }
+  }, [setAiAutoInjectZaloContext, setAiQuickPanelContextCountOverride]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -216,61 +335,85 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
     setInput('');
     setLoading(true);
 
-    // Save user message to DB
     let convId = conversationId;
-    if (activeAccountId && activeThreadId) {
-      if (!convId) {
-        try {
-          const convRes = await ipc.ai?.getOrCreateConversation({ zaloId: activeAccountId, threadId: activeThreadId, assistantId: activeId });
-          if (convRes?.success && convRes.conversation) {
-            convId = convRes.conversation.id;
-            setConversationId(convId);
-          }
-        } catch {}
-      }
-      if (convId) {
-        ipc.ai?.addConversationMessage({ conversationId: convId, role: 'user', content: text }).catch(() => {});
-      }
+    if (!convId) {
+      try {
+        const convRes = await ipc.ai?.getOrCreateConversation({
+          zaloId: scopeZaloId,
+          threadId: scopeThreadId,
+          assistantId: activeId,
+          scope: isThreadView ? 'thread' : 'panel',
+        });
+        if (convRes?.success && convRes.conversation) {
+          convId = convRes.conversation.id;
+          setConversationId(convId);
+        }
+      } catch {}
+    }
+    if (convId) {
+      ipc.ai?.addConversationMessage({ conversationId: convId, role: 'user', content: text }).catch(() => {});
     }
 
     try {
-      const panelMsgs = [...messages, userMsg];
+      const panelMsgs = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
+      const { block, summary } = await resolveContextBlock(false);
 
-      // Auto-inject the Zalo chat context if there is an active thread
-      const msgsToSend: ChatMsg[] = [];
-      const zaloContext = await getZaloChatContext();
-      if (zaloContext) {
-        msgsToSend.push(
-          { role: 'user', content: `[Ngữ cảnh hội thoại Zalo hiện tại - ${effectiveContextMsgCount} tin nhắn gần nhất]\n${zaloContext}` },
-          { role: 'assistant', content: 'Đã nắm được ngữ cảnh hội thoại. Tôi sẽ trả lời dựa trên ngữ cảnh này.' },
-        );
-      }
-      msgsToSend.push(...panelMsgs);
-
-      const res = await ipc.ai?.chat(activeId, msgsToSend, true);
-      if (res?.success && res.result) {
-        const segments = parseStructuredResponse(res.result);
-        const assistantMsg: ChatMsg = { role: 'assistant', content: res.result!, segments: segments || undefined };
-        setMessages(prev => [...prev, assistantMsg]);
-        // Save assistant response to DB
-        if (convId) {
-          ipc.ai?.addConversationMessage({
-            conversationId: convId,
-            role: 'assistant',
-            content: res.result!,
-            segmentsJson: segments ? JSON.stringify(segments) : undefined,
-          }).catch(() => {});
-        }
+      let res: any;
+      if (ipc.ai?.chatWithTools) {
+        res = await ipc.ai.chatWithTools({
+          assistantId: activeId,
+          messages: panelMsgs,
+          enableTools: aiToolsEnabled,
+          contextBlock: block,
+        });
       } else {
-        const errorMsg: ChatMsg = { role: 'assistant', content: `Error: ${res?.error || tr('Không có phản hồi')}` };
-        setMessages(prev => [...prev, errorMsg]);
+        const fallbackMsgs = block
+          ? [{ role: 'user', content: block }, { role: 'assistant', content: 'Đã nắm ngữ cảnh.' }, ...panelMsgs]
+          : panelMsgs;
+        res = await ipc.ai?.chat(activeId, fallbackMsgs, false);
+      }
+
+      if (res?.success && (res.result || res.pendingActions?.length)) {
+        const rawText = res.result || '';
+        const maybeSegments = parseStructuredResponse(rawText);
+        const meta: AIChatMessageMetadata = {
+          executedTools: res.executedTools || [],
+          pendingActions: res.pendingActions || [],
+          totalTokens: res.totalTokens,
+          contextSummary: summary || undefined,
+        };
+        const assistantMsg: ChatMsg = {
+          role: 'assistant',
+          content: rawText,
+          segments: maybeSegments || undefined,
+          meta,
+        };
+
+        let savedMsgId: number | undefined;
+        if (convId) {
+          try {
+            const addRes = await ipc.ai?.addConversationMessage({
+              conversationId: convId,
+              role: 'assistant',
+              content: rawText,
+              segmentsJson: maybeSegments ? JSON.stringify(maybeSegments) : undefined,
+              metadataJson: JSON.stringify(meta),
+            });
+            savedMsgId = addRes?.id;
+          } catch {}
+        }
+
+        setMessages(prev => [...prev, { ...assistantMsg, dbId: savedMsgId }]);
+        refreshSessions();
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${res?.error || tr('Không có phản hồi')}` }]);
       }
     } catch (e: any) {
       setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e.message}` }]);
     }
     setLoading(false);
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, [input, activeId, loading, messages, getZaloChatContext, effectiveContextMsgCount, conversationId, activeAccountId, activeThreadId]);
+  }, [input, activeId, loading, messages, conversationId, scopeZaloId, scopeThreadId, isThreadView, resolveContextBlock, aiToolsEnabled, refreshSessions]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -279,34 +422,66 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
     }
   };
 
-  /** Insert AI text into MessageInput by dispatching a custom event */
   const insertToChat = (text: string) => {
     window.dispatchEvent(new CustomEvent('ai:insertToChat', { detail: { text } }));
   };
 
-  /** Start a fresh AI conversation: delete the saved Q&A history of this thread and clear the panel */
   const handleNewChat = useCallback(async () => {
-    if (loading) return;
-    const convId = conversationId;
+    if (loading || !activeId) return;
+    try {
+      if (ipc.ai?.createConversation) {
+        const res = await ipc.ai.createConversation({
+          zaloId: scopeZaloId,
+          threadId: scopeThreadId,
+          assistantId: activeId,
+          scope: isThreadView ? 'thread' : 'panel',
+        });
+        if (res?.success && res.conversation) {
+          setConversationId(res.conversation.id);
+          setMessages([]);
+          refreshSessions();
+          setTimeout(() => inputRef.current?.focus(), 100);
+          return;
+        }
+      }
+    } catch {}
     setMessages([]);
     setConversationId(null);
-    if (convId) {
-      try { await ipc.ai?.deleteConversation({ conversationId: convId }); } catch {}
-    }
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, [loading, conversationId]);
+  }, [loading, activeId, scopeZaloId, scopeThreadId, isThreadView, refreshSessions]);
 
-  /** Summarize the conversation: fetch recent messages and send them to the AI to summarize */
+  const handleDeleteSession = useCallback(async (id: string) => {
+    if (!id || loading) return;
+    try {
+      await ipc.ai?.deleteConversation({ conversationId: id });
+      if (id === conversationId) {
+        setMessages([]);
+        setConversationId(null);
+      }
+      refreshSessions();
+    } catch {}
+  }, [loading, conversationId, refreshSessions]);
+
   const handleSummarize = useCallback(async () => {
     if (!activeId || loading) return;
-    const zaloContext = await getRawZaloChatContext();
-    if (!zaloContext) return;
+    const { block, summary } = await resolveContextBlock(true);
+    if (!block) return;
     setLoading(true);
-    const summaryPrompt = `Hãy tóm tắt cuộc hội thoại sau trong 3-5 dòng, nêu rõ: chủ đề chính, yêu cầu của khách, trạng thái hiện tại.\n\n${zaloContext}`;
-    const userMsg: ChatMsg = { role: 'user', content: tr('Tóm tắt hội thoại') };
+    const userMsg: ChatMsg = { role: 'user', content: tr('Tóm tắt ngữ cảnh đã chọn ({{v1}})', { v1: summary || tr('ngữ cảnh') }) };
     setMessages(prev => [...prev, userMsg]);
     try {
-      const res = await ipc.ai?.chat(activeId, [{ role: 'user', content: summaryPrompt }]);
+      const prompt = `Hãy tóm tắt chi tiết nội dung hội thoại dưới đây bằng Markdown:
+- **Chủ đề chính & bối cảnh**
+- **Yêu cầu / vấn đề của khách hàng**
+- **Những điểm đã thống nhất & việc cần làm tiếp theo**
+- **Trạng thái hiện tại**`;
+      const res = ipc.ai?.chatWithTools
+        ? await ipc.ai.chatWithTools({
+            assistantId: activeId,
+            messages: [{ role: 'user', content: prompt }],
+            enableTools: false,
+            contextBlock: block,
+          })
+        : await ipc.ai?.chat(activeId, [{ role: 'user', content: `${prompt}\n\n${block}` }], false);
       if (res?.success && res.result) {
         setMessages(prev => [...prev, { role: 'assistant', content: res.result! }]);
       } else {
@@ -316,41 +491,55 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
       setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${e.message}` }]);
     }
     setLoading(false);
-  }, [activeId, loading, getRawZaloChatContext]);
+  }, [activeId, loading, resolveContextBlock]);
 
-  const activeAssistant = assistants.find(a => a.id === activeId);
-  const canUseZaloContext = !!(activeAccountId && activeThreadId);
-  const hasZaloContext = canUseZaloContext && aiAutoInjectZaloContext;
+  const updatePendingAction = useCallback((msgIndex: number, updated: AIPendingToolAction) => {
+    setMessages(prev => prev.map((m, idx) => {
+      if (idx !== msgIndex) return m;
+      const nextActions = (m.meta?.pendingActions || []).map(a => a.id === updated.id ? updated : a);
+      const nextMeta: AIChatMessageMetadata = { ...(m.meta || {}), pendingActions: nextActions };
+      if (m.dbId && ipc.ai?.updateMessageMeta) {
+        ipc.ai.updateMessageMeta({ messageId: m.dbId, metadataJson: JSON.stringify(nextMeta) }).catch(() => {});
+      }
+      return { ...m, meta: nextMeta };
+    }));
+  }, []);
 
-  const applyContextCountInput = useCallback(() => {
-    const trimmed = contextCountInput.trim();
-    if (!trimmed) {
-      setContextCountInput(String(effectiveContextMsgCount));
-      return;
-    }
-    const parsed = Number(trimmed);
-    if (!Number.isFinite(parsed)) {
-      setContextCountInput(String(effectiveContextMsgCount));
-      return;
-    }
-    const next = clampContextCount(parsed);
-    setAiQuickPanelContextCountOverride(next);
-    setContextCountInput(String(next));
-  }, [contextCountInput, effectiveContextMsgCount, setAiQuickPanelContextCountOverride]);
+  const contextSummaryText = summarizeContextFilter(contextFilter, isThreadView);
 
   return (
-    <div className="w-[330px] h-full flex flex-col bg-card border-l border-border">
+    <div className="w-full h-full flex flex-col bg-card">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-border flex-shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">{trx('<0/> Trợ lý AI', { 0: <BotIcon className="w-4 h-4 inline" /> })}
+      <div className="px-3.5 py-2.5 border-b border-border flex-shrink-0 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5 min-w-0">
+            <BotIcon className="w-4 h-4 text-purple-400 flex-shrink-0" />
+            <span className="truncate">{tr('Trợ lý AI')}</span>
+            {!isThreadView && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300 font-medium flex-shrink-0">
+                {tr('Toàn app')}
+              </span>
+            )}
           </h2>
-          <button onClick={onClose}
-            className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setView('ai')}
+              className="px-2 py-1 rounded-md text-[11px] bg-muted hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
+              title={tr('Mở không gian Chat AI toàn màn hình (AI Hub)')}
+            >
+              {tr('Mở rộng ⤢')}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-7 h-7 rounded-lg hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              title={tr('Đóng')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Assistant selector */}
@@ -358,105 +547,132 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
           <div className="text-xs text-muted-foreground">{tr('Đang tải...')}</div>
         ) : assistants.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-2">
-            <div className="text-3xl"><BotIcon className="w-4 h-4" /></div>
             <p className="text-xs text-muted-foreground text-center leading-relaxed">
               {trx('Chưa có trợ lý AI nào.<0/>Tạo trợ lý để bắt đầu hỗ trợ chat thông minh.', { 0: <br/> })}
             </p>
             <button
               onClick={() => {
-                const { setView, openIntegrationPanelTo } = useAppStore.getState();
-                setView('integration');
+                const { setView: go, openIntegrationPanelTo } = useAppStore.getState();
+                go('integration');
                 openIntegrationPanelTo('ai-assistant', 'list');
                 onClose();
               }}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors shadow-lg shadow-blue-900/30"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-colors"
             >
               {trx('<0/> Tạo trợ lý AI ngay', { 0: <SparklesIcon className="w-4 h-4" /> })}
             </button>
-            <div className="w-full pt-1 border-t border-border/60">
-              <p className="text-[10px] text-muted-foreground text-center mb-2">{tr('Nền tảng hỗ trợ')}</p>
-              <div className="flex justify-center gap-3">
-                {[<BotIcon className="w-4 h-4" />,<SparklesIcon className="w-4 h-4" />,<HelpCircleIcon className="w-4 h-4" />,<LightningIcon className="w-4 h-4" />].map((icon, idx) => {
-                  const names = ['OpenAI','Gemini','DeepSeek','Grok'];
-                  return (
-                  <div key={names[idx]} className="flex flex-col items-center gap-0.5">
-                    <span className="text-base">{icon}</span>
-                    <span className="text-[9px] text-muted-foreground">{names[idx]}</span>
-                  </div>
-                  );
-                })}
-              </div>
-            </div>
           </div>
         ) : (
-          <select value={activeId} onChange={e => setActiveId(e.target.value)}
-            className="w-full bg-card border border-input rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-blue-500">
-            {assistants.map(a => (
-              <option key={a.id} value={a.id}>
-                {PLATFORM_ICON_TEXTS[a.platform] || '[AI]'} {a.name} - {a.model}
-                {a.isDefault ? tr(' [Mac dinh]') : ''}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-1.5">
+            <select
+              value={activeId}
+              onChange={e => setActiveId(e.target.value)}
+              className="flex-1 min-w-0 bg-background border border-input rounded-lg px-2.5 py-1.5 text-xs text-foreground focus:outline-none focus:border-blue-500"
+            >
+              {assistants.map(a => (
+                <option key={a.id} value={a.id}>
+                  {PLATFORM_ICON_TEXTS[a.platform] || '[AI]'} {a.name} - {a.model}
+                  {a.isDefault ? tr(' [Mac dinh]') : ''}
+                </option>
+              ))}
+            </select>
+            {sessions.length > 1 && (
+              <select
+                value={conversationId || ''}
+                onChange={e => {
+                  const id = e.target.value;
+                  if (id) {
+                    setConversationId(id);
+                    loadMessagesForConversation(id);
+                  }
+                }}
+                className="w-28 bg-background border border-input rounded-lg px-2 py-1.5 text-[11px] text-muted-foreground focus:outline-none focus:border-blue-500"
+                title={tr('Chuyển phiên hỏi đáp đã lưu')}
+              >
+                {sessions.map((s, idx) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title ? s.title.slice(0, 26) : `${tr('Phiên')} #${sessions.length - idx}`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Auto-context indicator + quick actions */}
-      {activeId && canUseZaloContext && (
+      {/* Controls bar */}
+      {activeId && (
         <div className="px-3 py-2 border-b border-border/50 flex-shrink-0 space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 text-sm text-muted-foreground min-w-0">
-              <span>{hasZaloContext ? tr('Ngữ cảnh bật') : tr('Ngữ cảnh tắt')}</span>
+          <div className="flex items-center justify-between gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setFilterOpen(v => !v)}
+              className={`px-2 py-1 rounded-md text-[11px] border transition-colors truncate max-w-[175px] ${
+                filterOpen || (contextFilter.mode !== 'off' && contextFilter.enabled !== false)
+                  ? 'border-blue-500/50 bg-blue-600/15 text-blue-300'
+                  : 'border-border bg-background text-muted-foreground hover:text-foreground'
+              }`}
+              title={contextSummaryText}
+            >
+              🎯 {contextSummaryText}
+            </button>
+
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                role="switch"
-                aria-checked={hasZaloContext}
-                onClick={() => setAiAutoInjectZaloContext(!aiAutoInjectZaloContext)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${hasZaloContext ? 'bg-green-600' : 'bg-accent hover:bg-accent'}`}
-                title={hasZaloContext ? tr('Tắt tự động gửi ngữ cảnh Zalo') : tr('Bật tự động gửi ngữ cảnh Zalo')}
+                onClick={() => setAiToolsEnabled(!aiToolsEnabled)}
+                className={`p-1.5 rounded-md border text-[11px] transition-colors ${
+                  aiToolsEnabled
+                    ? 'border-emerald-500/50 bg-emerald-600/15 text-emerald-300'
+                    : 'border-border bg-background text-muted-foreground hover:text-foreground'
+                }`}
+                title={aiToolsEnabled ? tr('Tool Calling: Đang bật (AI có thể tự tra cứu CRM/ERP/POS/Tin nhắn)') : tr('Tool Calling: Đang tắt')}
               >
-                <span
-                  className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${hasZaloContext ? 'translate-x-5' : 'translate-x-1'}`}
-                />
+                <WrenchIcon className="w-3.5 h-3.5" />
               </button>
+              <button
+                type="button"
+                onClick={handleNewChat}
+                disabled={loading}
+                className="text-[11px] px-2 py-1 rounded-md bg-blue-900/50 text-blue-200 hover:bg-blue-800/60 disabled:opacity-40 transition-colors"
+                title={tr('Tạo cuộc trò chuyện AI mới')}
+              >
+                {tr('+ Mới')}
+              </button>
+              {conversationId && messages.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteSession(conversationId)}
+                  disabled={loading}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-muted disabled:opacity-40 transition-colors"
+                  title={tr('Xóa phiên chat hiện tại')}
+                >
+                  <TrashIcon className="w-3.5 h-3.5" />
+                </button>
+              )}
+              {(isThreadView || contextFilter.mode === 'custom_filter') && (
+                <button
+                  type="button"
+                  onClick={handleSummarize}
+                  disabled={loading}
+                  className="text-[11px] px-2 py-1 rounded-md bg-purple-900/50 text-purple-200 hover:bg-purple-800/60 disabled:opacity-40 transition-colors inline-flex items-center gap-1"
+                  title={tr('AI tóm tắt ngữ cảnh đang chọn')}
+                >
+                  <FileTextIcon className="w-3.5 h-3.5" />
+                  <span>{tr('Tóm tắt')}</span>
+                </button>
+              )}
             </div>
-            <button
-              onClick={handleNewChat}
-              disabled={loading}
-              className="text-[12px] px-2 py-0.5 rounded bg-blue-900/60 text-blue-100 hover:bg-blue-800/50 disabled:opacity-40 transition-colors flex-shrink-0"
-              title={tr('Xóa lịch sử hỏi đáp AI của hội thoại này và bắt đầu cuộc mới')}
-            >{tr('+ Cuộc mới')}</button>
-            <button
-              onClick={handleSummarize}
-              disabled={loading}
-              className="text-[12px] px-2 py-0.5 rounded bg-purple-900/60 text-purple-100 hover:bg-purple-800/50 disabled:opacity-40 transition-colors flex-shrink-0"
-              title={tr('AI tóm tắt hội thoại hiện tại')}
-            >{trx('<0/> Tóm tắt', { 0: <FileTextIcon className="w-4 h-4 inline" /> })}
-            </button>
           </div>
 
-          {hasZaloContext && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{tr('Số ngữ cảnh')}</span>
-              <input
-                type="number"
-                min={1}
-                max={1000}
-                step={1}
-                value={contextCountInput}
-                onChange={(e) => setContextCountInput(e.target.value)}
-                onBlur={applyContextCountInput}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    applyContextCountInput();
-                  }
-                }}
-                className="w-16 bg-card border border-input rounded-md px-2 py-1 text-[11px] text-foreground focus:outline-none focus:border-blue-500"
-                title={tr('Số lượng tin nhắn dùng làm ngữ cảnh')}
-              />
-              <span className="text-[11px] text-muted-foreground">{tr('Tối đa 1000 tin')}</span>
-            </div>
+          {filterOpen && (
+            <AIContextFilterPanel
+              value={contextFilter}
+              onChange={handleFilterChange}
+              hasActiveThread={isThreadView}
+              compact
+              onClose={() => setFilterOpen(false)}
+            />
           )}
         </div>
       )}
@@ -464,63 +680,71 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 && activeId && (
-          <div className="text-center py-10">
-            <p className="text-xs text-muted-foreground">
-              {canUseZaloContext
-                ? (hasZaloContext
-                    ? tr('Hỏi bất kỳ điều gì - trợ lý AI sẽ tự động nắm ngữ cảnh hội thoại Zalo hiện tại')
-                    : tr('Hỏi bất kỳ điều gì - đang chat với trợ lý AI nội bộ, không tự gửi lịch sử chat Zalo'))
-                : tr('Hỏi bất kỳ điều gì - AI sẽ trả lời dựa trên prompt và dữ liệu đã cấu hình')}
+          <div className="text-center py-8 px-2 space-y-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {isThreadView
+                ? tr('Hỏi bất kỳ điều gì — AI tự nắm ngữ cảnh hội thoại và có thể dùng Tool tra cứu CRM, ERP, POS hoặc lọc tới 1.000 tin nhắn.')
+                : tr('Trợ lý AI toàn ứng dụng — mở bộ lọc 🎯 để chọn nhiều hội thoại, khoảng thời gian, nhãn/tag, người gửi hoặc dùng Tool hỏi trực tiếp.')}
             </p>
           </div>
         )}
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
+            <div className={`max-w-[92%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
               msg.role === 'user'
                 ? 'bg-blue-600 text-white'
-                : 'bg-card text-foreground border border-border'
+                : 'bg-background/70 text-foreground border border-border'
             }`}>
-              {/* Render structured segments (text + images) or plain text */}
-              {msg.segments && msg.segments.length > 0 ? (
-                <div className="space-y-2">
-                  {msg.segments.map((seg, si) => (
-                    seg.type === 'image' && Array.isArray(seg.content) ? (
-                      <div key={si} className="flex flex-wrap gap-1.5">
-                        {seg.content.map((url: string, ui: number) => (
-                          <img key={ui} src={url} alt="" className="max-w-full max-h-32 rounded-lg object-cover border border-input/30"
-                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                        ))}
-                      </div>
-                    ) : seg.type === 'text' && seg.content ? (
-                      <div key={si} className="whitespace-pre-wrap break-words">{seg.content}</div>
-                    ) : null
-                  ))}
-                </div>
-              ) : (
-                <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+              {msg.role === 'assistant' && msg.meta?.executedTools && (
+                <ExecutedToolsBadge tools={msg.meta.executedTools} />
               )}
-              {msg.role === 'assistant' && !msg.content.startsWith('Error:') && (
-                <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-border/50">
-                  <button onClick={() => {
-                    const textToInsert = msg.segments
-                      ? msg.segments.filter(s => s.type === 'text').map(s => s.content).join('\n')
-                      : msg.content;
-                    insertToChat(textToInsert);
-                  }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-blue-900/40 text-blue-400 hover:bg-blue-800/50 transition-colors"
-                    title={tr('Chèn vào ô chat')}>
-                    {trx('<0/> Chèn vào chat', { 0: <EditIcon className="w-4 h-4 inline" /> })}
+
+              <AIMarkdownRenderer
+                content={msg.content}
+                segments={msg.segments}
+                isUser={msg.role === 'user'}
+              />
+
+              {msg.role === 'assistant' && msg.meta?.pendingActions && msg.meta.pendingActions.length > 0 && (
+                <PendingActionList
+                  actions={msg.meta.pendingActions}
+                  onUpdateAction={updated => updatePendingAction(i, updated)}
+                />
+              )}
+
+              {msg.role === 'assistant' && !msg.content.startsWith('Error:') && msg.content.trim() && (
+                <div className="flex items-center gap-1.5 mt-2 pt-1.5 border-t border-border/50 flex-wrap">
+                  {isThreadView && (
+                    <button
+                      onClick={() => {
+                        const textToInsert = msg.segments
+                          ? msg.segments.filter(s => s.type === 'text').map(s => s.content).join('\n')
+                          : msg.content;
+                        insertToChat(textToInsert);
+                      }}
+                      className="text-[10px] px-2 py-0.5 rounded bg-blue-900/40 text-blue-400 hover:bg-blue-800/50 transition-colors inline-flex items-center gap-1"
+                      title={tr('Chèn vào ô chat')}
+                    >
+                      <EditIcon className="w-3 h-3" />
+                      <span>{tr('Chèn vào chat')}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      const textToCopy = msg.segments
+                        ? msg.segments.filter(s => s.type === 'text').map(s => s.content).join('\n')
+                        : msg.content;
+                      navigator.clipboard.writeText(textToCopy);
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+                    title={tr('Copy')}
+                  >
+                    <ClipboardListIcon className="w-3 h-3" />
+                    <span>{tr('Copy')}</span>
                   </button>
-                  <button onClick={() => {
-                    const textToCopy = msg.segments
-                      ? msg.segments.filter(s => s.type === 'text').map(s => s.content).join('\n')
-                      : msg.content;
-                    navigator.clipboard.writeText(textToCopy);
-                  }}
-                    className="text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                    title={tr('Copy')}>{trx('<0/> Copy', { 0: <ClipboardListIcon className="w-4 h-4 inline" /> })}
-                  </button>
+                  {msg.meta?.contextSummary && (
+                    <span className="ml-auto text-[10px] text-muted-foreground">{msg.meta.contextSummary}</span>
+                  )}
                 </div>
               )}
             </div>
@@ -528,11 +752,12 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-card border border-border rounded-xl px-3 py-2">
-              <div className="flex items-center gap-1">
+            <div className="bg-background/70 border border-border rounded-xl px-3 py-2">
+              <div className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}/>
                 <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}/>
                 <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}/>
+                <span className="text-[11px] text-muted-foreground ml-1">{tr('Đang xử lý...')}</span>
               </div>
             </div>
           </div>
@@ -542,18 +767,22 @@ export default function AIQuickPanel({ onClose }: { onClose: () => void }) {
       {/* Input */}
       {activeId && (
         <div className="px-3 pb-3 pt-1 flex-shrink-0">
-          <div className="flex items-end gap-2 bg-card border border-border rounded-xl px-3 py-2">
-            <textarea ref={inputRef}
+          <div className="flex items-end gap-2 bg-background border border-border rounded-xl px-3 py-2 focus-within:border-blue-500 transition-colors">
+            <textarea
+              ref={inputRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={tr('Nhập câu hỏi...')}
+              placeholder={tr('Nhập câu hỏi cho trợ lý AI...')}
               rows={1}
-              className="flex-1 bg-transparent text-sm text-foreground placeholder-subtle-foreground resize-none outline-none max-h-24 overflow-y-auto"
+              className="flex-1 bg-transparent text-sm text-foreground placeholder-subtle-foreground resize-none outline-none max-h-28 overflow-y-auto"
               style={{ minHeight: '1.5rem' }}
             />
-            <button onClick={handleSend} disabled={loading || !input.trim()}
-              className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 flex items-center justify-center text-white transition-colors flex-shrink-0">
+            <button
+              onClick={handleSend}
+              disabled={loading || !input.trim()}
+              className="w-7 h-7 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 flex items-center justify-center text-white transition-colors flex-shrink-0"
+            >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
               </svg>
