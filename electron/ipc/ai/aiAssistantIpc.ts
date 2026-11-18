@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import AIAssistantService from '../../../src/services/ai/AIAssistantService';
+import AIRoomService from '../../../src/services/ai/AIRoomService';
 import AIToolService from '../../../src/services/ai/AIToolService';
 import DatabaseService from '../../../src/services/database/DatabaseService';
 import WorkspaceManager from '../../../src/utils/app/WorkspaceManager';
@@ -517,6 +518,94 @@ export function registerAIAssistantIpc(): void {
   ipcMain.handle('ai:deleteConversation', async (_e, { conversationId }: { conversationId: string }) => {
     try {
       DatabaseService.getInstance().deleteAIConversation(conversationId);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  // ─── Multi-AI Group Rooms & Cross-Channel Bridges (Phase 2 & 3) ───────────
+  ipcMain.handle('ai:room:list', async () => {
+    try {
+      if (isEmployeeMode()) return await proxyToBossWithResult('ai:room:list', {});
+      return { success: true, rooms: AIRoomService.getInstance().listRooms() };
+    } catch (e: any) {
+      return { success: false, error: e.message, rooms: [] };
+    }
+  });
+
+  ipcMain.handle('ai:room:get', async (_e, { roomId }: { roomId: string }) => {
+    try {
+      if (isEmployeeMode()) return await proxyToBossWithResult('ai:room:get', { roomId });
+      const room = AIRoomService.getInstance().getRoom(roomId);
+      return room ? { success: true, room } : { success: false, error: tr('Không tìm thấy nhóm AI') };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ai:room:save', async (_e, { room }: { room: any }) => {
+    try {
+      if (isEmployeeMode()) return await proxyToBossWithResult('ai:room:save', { room });
+      const saved = AIRoomService.getInstance().saveRoom(room);
+      return { success: true, room: saved };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ai:room:delete', async (_e, { roomId }: { roomId: string }) => {
+    try {
+      if (isEmployeeMode()) return await proxyToBossWithResult('ai:room:delete', { roomId });
+      AIRoomService.getInstance().deleteRoom(roomId);
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ai:room:getMessages', async (_e, { roomId, limit }: { roomId: string; limit?: number }) => {
+    try {
+      if (isEmployeeMode()) return await proxyToBossWithResult('ai:room:getMessages', { roomId, limit });
+      const messages = AIRoomService.getInstance().getMessages(roomId, limit || 200);
+      return { success: true, messages };
+    } catch (e: any) {
+      return { success: false, error: e.message, messages: [] };
+    }
+  });
+
+  ipcMain.handle('ai:room:sendMessage', async (_e, payload: any) => {
+    try {
+      if (isEmployeeMode()) return await proxyToBossWithResult('ai:room:sendMessage', payload);
+      return await AIRoomService.getInstance().sendUserMessage(payload);
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  });
+
+  ipcMain.handle('ai:room:triggerAI', async (_e, payload: any) => {
+    try {
+      if (isEmployeeMode()) return await proxyToBossWithResult('ai:room:triggerAI', payload);
+      return await AIRoomService.getInstance().triggerManualAI(payload);
+    } catch (e: any) {
+      return { success: false, error: e.message, aiMessages: [] };
+    }
+  });
+
+  ipcMain.handle('ai:room:broadcastMessage', async (_e, payload: any) => {
+    try {
+      if (isEmployeeMode()) return await proxyToBossWithResult('ai:room:broadcastMessage', payload);
+      return await AIRoomService.getInstance().broadcastToBridges(payload);
+    } catch (e: any) {
+      return { success: false, error: e.message, deliveries: [] };
+    }
+  });
+
+  ipcMain.handle('ai:room:updateMessageMeta', async (_e, { messageId, metadataJson }: { messageId: number; metadataJson: string }) => {
+    try {
+      if (isEmployeeMode()) return await proxyToBossWithResult('ai:room:updateMessageMeta', { messageId, metadataJson });
+      DatabaseService.getInstance().updateAIRoomMessageMeta(messageId, metadataJson);
+      DatabaseService.getInstance().save();
       return { success: true };
     } catch (e: any) {
       return { success: false, error: e.message };

@@ -36,6 +36,20 @@ export {
     DEFAULT_AI_TOOL_PERMISSIONS,
     normalizeAIToolPermissions,
 } from './ai/ai';
+export type {
+    AIRoomType,
+    AIRoomRoutingMode,
+    AIRoomTriggerMode,
+    AIBridgeChannel,
+    AIBridgeDirection,
+    AIBridgeOutboundMode,
+    AIRoomMember,
+    AIRoomBridge,
+    AIRoom,
+    AIRoomRelayDelivery,
+    AIRoomMessageMeta,
+    AIRoomMessage,
+} from './ai/aiRoom';
 
 // Employee
 export type {

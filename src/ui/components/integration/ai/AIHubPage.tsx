@@ -12,11 +12,14 @@ import { getAIPlatformMeta } from './aiPlatformMeta';
 import AIMarkdownRenderer from './AIMarkdownRenderer';
 import { ExecutedToolsBadge, PendingActionList } from './AIToolCards';
 import AIContextFilterPanel, { summarizeContextFilter } from './AIContextFilterPanel';
+import AIRoomModal from './AIRoomModal';
+import AIRoomChatView from './AIRoomChatView';
 import type {
   AIChatMessageMetadata,
   AIContextFilter,
   AIPendingToolAction,
 } from '../../../../models/ai/ai';
+import type { AIRoom } from '../../../../models/ai/aiRoom';
 import {
   BotIcon,
   ClipboardListIcon,
@@ -92,6 +95,11 @@ export default function AIHubPage() {
   const [loadingAssistants, setLoadingAssistants] = useState(true);
   const [selectedAssistantId, setSelectedAssistantId] = useState<string>('');
 
+  const [rooms, setRooms] = useState<AIRoom[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
+  const [roomModalOpen, setRoomModalOpen] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<AIRoom | null>(null);
+
   const [sessions, setSessions] = useState<HubSession[]>([]);
   const [sessionScopeFilter, setSessionScopeFilter] = useState<'hub' | 'all'>('hub');
   const [sessionSearch, setSessionSearch] = useState('');
@@ -135,9 +143,25 @@ export default function AIHubPage() {
     } catch {}
   }, [sessionScopeFilter]);
 
+  const loadRooms = useCallback(async () => {
+    if (!ipc.ai?.listRooms) return;
+    try {
+      const res = await ipc.ai.listRooms();
+      if (res?.success) setRooms(res.rooms || []);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    loadRooms();
+    const unsub = ipc.on?.('ai:roomUpdated', () => {
+      loadRooms();
+    });
+    return () => { unsub?.(); };
+  }, [loadRooms]);
 
   const loadConversationMessages = useCallback(async (convId: string) => {
     try {
@@ -175,6 +199,7 @@ export default function AIHubPage() {
   }, [messages, loading]);
 
   const handleSelectAssistant = (assistantId: string) => {
+    setSelectedRoomId(null);
     setSelectedAssistantId(assistantId);
     const match = sessions.find(s => s.assistant_id === assistantId);
     if (match) {
@@ -189,12 +214,17 @@ export default function AIHubPage() {
   };
 
   const handleSelectSession = (s: HubSession) => {
+    setSelectedRoomId(null);
     setActiveConvId(s.id);
     if (s.assistant_id && assistants.some(a => a.id === s.assistant_id)) {
       setSelectedAssistantId(s.assistant_id);
     }
     setContextFilter(parseFilterJson(s.context_filter_json));
     loadConversationMessages(s.id);
+  };
+
+  const handleSelectRoom = (roomId: string) => {
+    setSelectedRoomId(roomId);
   };
 
   const handleNewSession = useCallback(async (assistantOverride?: string) => {
@@ -441,6 +471,61 @@ export default function AIHubPage() {
           </button>
         </div>
 
+        {/* Multi-AI & Bridged Rooms (Phase 2 & 3) */}
+        <div className="px-3 py-2.5 border-b border-border/70">
+          <div className="flex items-center justify-between gap-2 mb-2 px-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-purple-300">
+              {tr('Nhóm AI & Đa kênh')} ({rooms.length})
+            </span>
+            <button
+              type="button"
+              onClick={() => { setEditingRoom(null); setRoomModalOpen(true); }}
+              className="text-[10px] px-2 py-0.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-medium transition-colors"
+            >
+              {tr('+ Tạo nhóm')}
+            </button>
+          </div>
+          {rooms.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => { setEditingRoom(null); setRoomModalOpen(true); }}
+              className="w-full py-2 px-2.5 rounded-xl border border-dashed border-purple-500/35 hover:border-purple-400/60 bg-purple-950/10 text-[11px] text-purple-300/90 hover:text-purple-200 transition-colors text-left"
+            >
+              {tr('+ Tạo nhóm nhiều AI hoặc nối Zalo / FB / Telegram')}
+            </button>
+          ) : (
+            <div className="space-y-1 max-h-40 overflow-y-auto pr-0.5">
+              {rooms.map(r => {
+                const selected = r.id === selectedRoomId;
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => handleSelectRoom(r.id)}
+                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition-colors border ${
+                      selected
+                        ? 'bg-purple-600/20 border-purple-500/50 text-foreground'
+                        : 'border-transparent hover:bg-muted text-foreground/85'
+                    }`}
+                  >
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-white ${
+                      r.bridges.length > 0 ? 'bg-gradient-to-br from-purple-600 to-blue-600' : 'bg-purple-600'
+                    }`}>
+                      <UsersIcon className="w-3.5 h-3.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold truncate">{r.name}</div>
+                      <div className="text-[10px] text-muted-foreground truncate">
+                        {r.members.length} AI{r.bridges.length > 0 ? ` · ${r.bridges.length} kênh` : ''}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Assistants contact list */}
         <div className="px-3 py-2.5 border-b border-border/70">
           <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-1">
@@ -453,10 +538,10 @@ export default function AIHubPage() {
               {tr('Chưa có trợ lý AI nào được bật.')}
             </div>
           ) : (
-            <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+            <div className="space-y-1 max-h-40 overflow-y-auto pr-0.5">
               {assistants.map(a => {
                 const meta = getAIPlatformMeta(a.platform);
-                const selected = a.id === selectedAssistantId;
+                const selected = !selectedRoomId && a.id === selectedAssistantId;
                 return (
                   <button
                     key={a.id}
@@ -585,6 +670,24 @@ export default function AIHubPage() {
       </aside>
 
       {/* ── Main Chat Workspace ──────────────────────────────────────────────── */}
+      {(() => {
+        const activeRoom = selectedRoomId ? rooms.find(r => r.id === selectedRoomId) : null;
+        if (activeRoom) {
+          return (
+            <AIRoomChatView
+              room={activeRoom}
+              onEditRoom={() => { setEditingRoom(activeRoom); setRoomModalOpen(true); }}
+              onRoomDeleted={(deletedId) => {
+                setRooms(prev => prev.filter(r => r.id !== deletedId));
+                setSelectedRoomId(null);
+              }}
+              onRoomUpdated={(updated) => {
+                setRooms(prev => prev.map(r => (r.id === updated.id ? updated : r)));
+              }}
+            />
+          );
+        }
+        return (
       <main className="flex-1 min-w-0 flex flex-col overflow-hidden">
         {/* Top bar */}
         <div className="px-5 py-3 border-b border-border bg-card/60 flex items-center justify-between gap-3 flex-wrap flex-shrink-0">
@@ -807,8 +910,27 @@ export default function AIHubPage() {
           </div>
         )}
       </main>
+        );
+      })()}
 
-      {/* Phase 2-3 Roadmap Modal */}
+      {/* Room Create / Edit Modal */}
+      <AIRoomModal
+        open={roomModalOpen}
+        initialRoom={editingRoom}
+        assistants={assistants}
+        onClose={() => { setRoomModalOpen(false); setEditingRoom(null); }}
+        onSaved={(savedRoom) => {
+          setRooms(prev => {
+            const exists = prev.some(r => r.id === savedRoom.id);
+            return exists ? prev.map(r => (r.id === savedRoom.id ? savedRoom : r)) : [savedRoom, ...prev];
+          });
+          setSelectedRoomId(savedRoom.id);
+          setRoomModalOpen(false);
+          setEditingRoom(null);
+        }}
+      />
+
+      {/* Phase 2-3 Guide Modal */}
       {roadmapOpen && (
         <div className="fixed inset-0 z-[9995] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setRoadmapOpen(false)}>
           <div
@@ -817,7 +939,7 @@ export default function AIHubPage() {
           >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div>
-                <h3 className="text-base font-bold text-foreground">{tr('Lộ trình Nâng cấp AI (Phase 2 & Phase 3)')}</h3>
+                <h3 className="text-base font-bold text-foreground">{tr('Kiến trúc Trợ lý AI Deplao (Phase 1 – 3)')}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">{tr('Tài liệu chi tiết lưu tại docs/AI-UPGRADE-ROADMAP.md')}</p>
               </div>
               <button
@@ -830,30 +952,40 @@ export default function AIHubPage() {
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs leading-relaxed text-foreground/90">
               <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/15">
-                <div className="font-bold text-emerald-300 mb-1">Phase 1 — Đã hoàn thành trong phiên bản này</div>
+                <div className="font-bold text-emerald-300 mb-1">Phase 1 — Đã hoàn thành</div>
                 <ul className="list-disc pl-4 space-y-1 text-muted-foreground">
-                  <li>Sidebar phải tự đẩy & thu gọn vùng chat (không che nội dung) + kéo giãn độ rộng.</li>
-                  <li>AI Hub độc lập + Global AI Drawer mở từ TopBar (`Ctrl+Shift+A`) ở mọi màn hình.</li>
-                  <li>Bộ lọc ngữ cảnh đa chiều (Thời gian, Nhiều/Tất cả hội thoại, Nhãn/Tag, 1-1/Nhóm, Nhiều người gửi, tối đa 1.000 tin).</li>
-                  <li>Hiển thị Markdown chuẩn (Bảng, Code block, Danh sách) + Tool Calling tự động tra cứu & thẻ xác nhận hành động.</li>
+                  <li>Sidebar phải tự đẩy & thu gọn vùng chat + Global AI Drawer (`Ctrl+Shift+A`).</li>
+                  <li>Bộ lọc ngữ cảnh đa chiều tới 1.000 tin nhắn (Nhãn Zalo, Nhãn Deplao, Tag CRM, nhiều hội thoại & người gửi).</li>
+                  <li>28 Tool Calling CRM, HRM/Phòng ban, Dự án/Công việc, Lịch, Ghi chú, Báo cáo & khóa cứng quyền Xóa.</li>
                 </ul>
               </div>
-              <div className="p-3.5 rounded-xl border border-blue-500/30 bg-blue-950/15">
-                <div className="font-bold text-blue-300 mb-1">Phase 2 — Phòng Chat Nhiều AI Nội Bộ (Multi-AI Room)</div>
+              <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/15">
+                <div className="font-bold text-emerald-300 mb-1">Phase 2 — Nhóm Chat Nhiều AI Nội Bộ (Đã sẵn sàng)</div>
                 <ul className="list-disc pl-4 space-y-1 text-muted-foreground">
-                  <li>Bảng dữ liệu `ai_rooms`, `ai_room_members`, `ai_room_messages`.</li>
-                  <li>Mời nhiều Trợ lý AI chuyên môn (Sales AI, CSKH AI, Kế toán AI) vào chung 1 phòng họp.</li>
-                  <li>Cơ chế `@mention` gọi đích danh từng AI, chế độ Thảo luận vòng tròn (Round-table) & AI Điều phối tổng hợp kết luận.</li>
+                  <li>Mời nhiều Trợ lý AI (Sales, CSKH, Kế toán, Quản lý...) vào chung 1 nhóm, đặt `@alias` và nhiệm vụ riêng.</li>
+                  <li>Hỗ trợ 3 chế độ phối hợp: `@mention`, Thảo luận vòng tròn (Round-table) và AI Điều phối (Moderator tự giao việc & chốt kết quả).</li>
                 </ul>
               </div>
-              <div className="p-3.5 rounded-xl border border-purple-500/30 bg-purple-950/15">
-                <div className="font-bold text-purple-300 mb-1">Phase 3 — Bridge Room Đa Nền Tảng (Người + AI + Zalo / Facebook / Telegram)</div>
+              <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-950/15">
+                <div className="font-bold text-emerald-300 mb-1">Phase 3 — Phòng Chat Liên Nền Tảng (Đã sẵn sàng)</div>
                 <ul className="list-disc pl-4 space-y-1 text-muted-foreground">
-                  <li>Phòng cầu nối ảo (`ai_room_bridges`) liên kết đồng thời nhóm/cá nhân từ Zalo, Facebook Messenger và Telegram.</li>
-                  <li>Định danh nguồn tin nhắn (`[Zalo · Nguyễn Văn A]: ...`), đồng bộ qua `AccountSendQueue` chống khóa nick cá nhân.</li>
-                  <li>Bộ chống lặp vô hạn (Loop Guard bằng `origin_msg_id`) và 2 chế độ: Duyệt trước khi chuyển tiếp (Semi-Auto) hoặc Tự động hoàn toàn (Auto-Relay).</li>
+                  <li>Kết nối hội thoại Zalo, Facebook Messenger, Telegram và Telegram Bot vào chung 1 phòng họp.</li>
+                  <li>Tự động chống lặp tin nhắn (Echo Guard), đi qua hàng đợi `AccountSendQueue`, hỗ trợ Duyệt trước hoặc Tự động chuyển tiếp.</li>
                 </ul>
               </div>
+            </div>
+            <div className="px-5 py-3 border-t border-border flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setRoadmapOpen(false);
+                  setEditingRoom(null);
+                  setRoomModalOpen(true);
+                }}
+                className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold transition-colors"
+              >
+                {tr('+ Tạo Nhóm AI / Phòng Đa Kênh ngay')}
+              </button>
             </div>
           </div>
         </div>

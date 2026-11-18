@@ -1123,6 +1123,13 @@ export default class ZaloService {
         }
     }
 
+    public async getMute(): Promise<any> {
+        if (!this.api) {
+            throw new Error("API not initialized. Please ensure you've called initialize() first.");
+        }
+        return await (this.api as any).getMute();
+    }
+
     public async getGroupLinkDetail(groupId: string): Promise<GetGroupLinkDetailResponse> {
         if (!this.api) {
             throw new Error("API not initialized. Please ensure you've called initialize() first.");

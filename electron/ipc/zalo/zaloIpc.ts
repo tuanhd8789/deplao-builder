@@ -622,6 +622,43 @@ export function registerZaloIpc() {
         s.setMute(p.threadId, p.threadType ?? 0, p.duration, p.action)
     );
 
+    // ─── Get & Sync Mute conversations ────────────────────────────────────
+    {
+        const handler = async (_event: any, params: any) => {
+            try {
+                const activeWs = WorkspaceManager.getInstance().getActiveWorkspace();
+                if (activeWs?.type === 'remote' && !params?._fromRelay) {
+                    if (!HttpConnectionManager.getInstance().isConnected(activeWs.id)) {
+                        return { success: false, error: tr('Chưa kết nối tới BOSS'), response: { chatEntries: [], groupChatEntries: [] } };
+                    }
+                    return await HttpConnectionManager.getInstance().proxyAction(activeWs.id, 'zalo:getMute', params);
+                }
+                let { auth } = params || {};
+                if (!auth) return { success: false, error: 'Missing auth' };
+                const zaloId = resolveZaloId(auth);
+                auth = resolveAuthFromConnection(auth, zaloId);
+                const service = await getService(typeof auth === 'string' ? auth : JSON.stringify(auth), false);
+                const result = await service.getMute();
+                if (zaloId && result) {
+                    const changed = DatabaseService.getInstance().syncZaloMuteEntries(zaloId, result);
+                    for (const item of changed) {
+                        EventBroadcaster.emit('db:contactFlagsChanged', {
+                            ownerZaloId: zaloId,
+                            contactId: item.contactId,
+                            flags: { is_muted: item.is_muted, mute_until: item.mute_until },
+                        });
+                    }
+                }
+                return { success: true, response: result };
+            } catch (error: any) {
+                Logger.error('[zaloIpc] zalo:getMute error:', error);
+                return { success: false, error: error?.message || String(error) };
+            }
+        };
+        ipcMain.handle('zalo:getMute', handler);
+        ipcHandlerRegistry.set('zalo:getMute', handler);
+    }
+
     // ─── Labels ───────────────────────────────────────────────────────────
     // getLabels uses plain HTTP and does not need an active WS connection
     // → does not use wrap() so it is not blocked by the !zaloId guard

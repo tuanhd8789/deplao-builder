@@ -1,5 +1,28 @@
 # Nhật ký thay đổi — Deplao
 
+## v26.11.3 (18/11/2026)
+
+### Điểm nổi bật
+- **Nhóm Chat Nhiều AI Nội Bộ (Phase 2)**: Mời nhiều Trợ lý AI với chuyên môn khác nhau (Sales, CSKH, Kế toán, Quản trị dự án...) vào chung một phòng để cùng bàn bạc, phản biện và xử lý công việc.
+- **Phòng Chat Liên Nền Tảng Người + AI + Zalo / Facebook / Telegram (Phase 3)**: Gom tin nhắn thời gian thực từ bất kỳ cuộc trò chuyện Zalo, Facebook Messenger, Telegram và Telegram Bot về chung 1 phòng họp có AI hỗ trợ.
+- **An toàn chống lặp & chống khóa tài khoản**: Trang bị bộ lọc chống lặp tin nhắn 2 lớp, hàng đợi giãn cách riêng theo từng tài khoản và tùy chọn duyệt bán tự động trước khi phát ra ngoài.
+
+### Tính năng mới
+- **Tạo & cấu hình Nhóm Nhiều AI** ngay trong mục **Trợ lý AI**:
+  - Đặt `@Alias` và mô tả vai trò/nhiệm vụ riêng cho từng AI tham gia nhóm.
+  - Hỗ trợ 3 chế độ phối hợp: **`@mention`** (gọi đích danh AI hoặc AI Trưởng nhóm), **Thảo luận vòng tròn** (các AI trả lời nối tiếp, tham khảo ý kiến nhau tối đa 1–6 lượt) và **AI Điều phối** (AI Trưởng nhóm phân việc cho các chuyên gia rồi tổng hợp kết luận).
+- **Phòng Chat Liên Nền Tảng (Bridge Room)**:
+  - Kết nối đồng thời nhiều hội thoại 1-1 hoặc nhóm từ **Zalo**, **Facebook**, **Telegram** và **Telegram Bot** vào cùng một phòng.
+  - Tùy chỉnh riêng từng nguồn: chiều đồng bộ (**Hai chiều**, **Chỉ nhận vào**, **Chỉ gửi ra**), chế độ (**Duyệt trước khi gửi** hoặc **Tự động chuyển tiếp**) và tùy chọn tự phát phản hồi của AI.
+  - Tin nhắn từ khách hàng/nhóm bên ngoài hiển thị rõ nhãn kênh và tên nguồn; hỗ trợ bấm nút **Gọi AI phân tích / trả lời** hoặc **Phát câu trả lời ra Zalo / Facebook / Telegram** ngay tại từng tin nhắn.
+
+### Cải thiện & An toàn
+- Mỗi thành viên AI trong nhóm vẫn sử dụng đầy đủ bộ 28 Tool Calling theo đúng phân quyền riêng và giữ nguyên khóa cứng cấm xóa dữ liệu.
+- Đồng bộ trạng thái tắt thông báo (Mute) từ Zalo về Deplao ngay khi kết nối hoặc chuyển tài khoản (giữ chuẩn trạng thái tắt theo giờ hoặc vô thời hạn từ điện thoại / Zalo PC).
+- Chống lặp vô hạn 2 lớp (dấu vân tay tin nhắn + ID tin nhắn đã phát) và xếp hàng gửi qua `AccountSendQueue` để bảo vệ tài khoản khỏi bị đánh dấu spam.
+
+---
+
 ## v26.11.2 (18/11/2026)
 
 ### Điểm nổi bật

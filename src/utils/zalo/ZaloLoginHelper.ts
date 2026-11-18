@@ -1128,6 +1128,26 @@ class ZaloLoginHelper {
             ConnectionManager.setConnected(zaloId, true);
             DatabaseService.getInstance().setListenerActive(zaloId, true);
             EventBroadcaster.broadcastConnected(zaloId, { zaloId, send2meId });
+
+            // Sync conversation mute statuses from Zalo server after connecting
+            Promise.resolve((connection.api as any)?.getMute?.())
+                .then((muteRes: any) => {
+                    if (!muteRes) return;
+                    const changed = DatabaseService.getInstance().syncZaloMuteEntries(zaloId, muteRes);
+                    for (const item of changed) {
+                        EventBroadcaster.emit('db:contactFlagsChanged', {
+                            ownerZaloId: zaloId,
+                            contactId: item.contactId,
+                            flags: { is_muted: item.is_muted, mute_until: item.mute_until },
+                        });
+                    }
+                    if (changed.length > 0) {
+                        Logger.log(`[ZaloLoginHelper] ${zaloId} 🔕 Synced ${changed.length} mute flag changes from Zalo`);
+                    }
+                })
+                .catch((err: any) => {
+                    Logger.warn(`[ZaloLoginHelper] ${zaloId} getMute sync failed: ${err?.message || err}`);
+                });
         });
 
         // Each listener only cleans up and schedules one re-login ("disconnected" then "closed", or when reconnecting takes too long)

@@ -196,6 +196,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getGroupChatHistory: (params: any) => ipcRenderer.invoke('zalo:getGroupChatHistory', params),
     getPinConversations: (auth: any) => ipcRenderer.invoke('zalo:getPinConversations', { auth }),
     setPinConversation: (params: any) => ipcRenderer.invoke('zalo:setPinConversation', params),
+    getMute: (auth: any) => ipcRenderer.invoke('zalo:getMute', { auth }),
     setMute: (params: any) => ipcRenderer.invoke('zalo:setMute', params),
     keepAlive: (auth: any) => ipcRenderer.invoke('zalo:keepAlive', { auth }),
     getLabels: (params: any) => ipcRenderer.invoke('zalo:getLabels', params),
@@ -535,6 +536,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateMessageMeta:       (params: any) => ipcRenderer.invoke('ai:updateMessageMeta', params),
     getConversations:        (params: any) => ipcRenderer.invoke('ai:getConversations', params),
     deleteConversation:      (params: any) => ipcRenderer.invoke('ai:deleteConversation', params),
+    // AI Group Rooms & Cross-Channel Bridges
+    listRooms:               () => ipcRenderer.invoke('ai:room:list'),
+    getRoom:                 (roomId: string) => ipcRenderer.invoke('ai:room:get', { roomId }),
+    saveRoom:                (room: any) => ipcRenderer.invoke('ai:room:save', { room }),
+    deleteRoom:              (roomId: string) => ipcRenderer.invoke('ai:room:delete', { roomId }),
+    getRoomMessages:         (params: { roomId: string; limit?: number }) => ipcRenderer.invoke('ai:room:getMessages', params),
+    sendRoomMessage:         (params: any) => ipcRenderer.invoke('ai:room:sendMessage', params),
+    triggerRoomAI:           (params: any) => ipcRenderer.invoke('ai:room:triggerAI', params),
+    broadcastRoomMessage:    (params: any) => ipcRenderer.invoke('ai:room:broadcastMessage', params),
+    updateRoomMessageMeta:   (params: { messageId: number; metadataJson: string }) => ipcRenderer.invoke('ai:room:updateMessageMeta', params),
   },
 
   // ─── Tunnel ───────────────────────────────────────────────────────
@@ -1147,6 +1158,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       'erp:event:departmentUpdated',
       'erp:event:employeeProfileUpdated',
       'erp:event:employeeProfileDeleted',
+      'ai:roomMessage',
+      'ai:roomUpdated',
       // ─── Library events ──────────────────────────────────────────
       'library:itemAdded',
       'library:itemUpdated',

@@ -461,6 +461,7 @@ declare global {
         getGroupChatHistory: (params: any) => Promise<any>;
         getPinConversations: (auth: any) => Promise<any>;
         setPinConversation: (params: any) => Promise<any>;
+        getMute?: (auth: any) => Promise<any>;
         setMute: (params: any) => Promise<any>;
         keepAlive: (auth: any) => Promise<any>;
         getLabels: (params: any) => Promise<any>;
@@ -916,6 +917,15 @@ declare global {
         updateMessageMeta?:      (params: { messageId: number; metadataJson: string }) => Promise<{ success: boolean; error?: string }>;
         getConversations:        (params: { zaloId: string; threadId: string }) => Promise<{ success: boolean; conversations: any[]; error?: string }>;
         deleteConversation:      (params: { conversationId: string }) => Promise<{ success: boolean; error?: string }>;
+        listRooms?:              () => Promise<{ success: boolean; rooms: any[]; error?: string }>;
+        getRoom?:                (roomId: string) => Promise<{ success: boolean; room?: any; error?: string }>;
+        saveRoom?:               (room: any) => Promise<{ success: boolean; room?: any; error?: string }>;
+        deleteRoom?:             (roomId: string) => Promise<{ success: boolean; error?: string }>;
+        getRoomMessages?:        (params: { roomId: string; limit?: number }) => Promise<{ success: boolean; messages: any[]; error?: string }>;
+        sendRoomMessage?:        (params: { roomId: string; content: string; targetBridgeKeys?: string[]; triggerAI?: boolean; contextBlock?: string; contextSummary?: string; enableTools?: boolean }) => Promise<{ success: boolean; userMessage?: any; aiMessages?: any[]; error?: string }>;
+        triggerRoomAI?:          (params: { roomId: string; assistantId?: string; promptText?: string; contextBlock?: string; enableTools?: boolean }) => Promise<{ success: boolean; aiMessages?: any[]; error?: string }>;
+        broadcastRoomMessage?:   (params: { roomId: string; messageId?: number; content: string; prefixSender?: string; targetBridgeKeys?: string[] }) => Promise<{ success: boolean; deliveries?: any[]; error?: string }>;
+        updateRoomMessageMeta?:  (params: { messageId: number; metadataJson: string }) => Promise<{ success: boolean; error?: string }>;
       };
       tunnel: {
         start:  () => Promise<{ success: boolean; url?: string; error?: string }>;

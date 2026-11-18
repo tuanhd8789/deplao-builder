@@ -727,7 +727,12 @@ export default function ConversationList() {
     const loadedAt = sideDataLoadedAtRef.current.get(activeAccountId) || 0;
     if (Date.now() - loadedAt < ACCOUNT_SIDE_DATA_TTL_MS) return;
     sideDataLoadedAtRef.current.set(activeAccountId, Date.now());
-    if (isZaloChannel) reloadZaloPins(activeAccountId, auth);
+    if (isZaloChannel) {
+      reloadZaloPins(activeAccountId, auth);
+      zaloApi('getMute', { auth })
+        .then(() => useAppStore.getState().loadFlags(activeAccountId))
+        .catch(() => {});
+    }
 
     // Load local pinned conversations from DB
     reloadLocalPins(activeAccountId);
@@ -2099,7 +2104,7 @@ export default function ConversationList() {
       return;
     }
     if (!accObj2 || !channelSupports((accObj2.channel || CHANNEL.ZALO) as Channel, 'supportsMuteSync')) return;
-    const auth = { cookies: accObj2.cookies, imei: accObj2.imei, userAgent: accObj2.user_agent };
+    const auth = buildZaloAuth(accObj2, zId);
     const contact = (useChatStore.getState().contacts[zId] || []).find(c => c.contact_id === contactId);
     const threadType = contact?.contact_type === 'group' ? 1 : 0;
     zaloApi('setMute', { auth, threadId: contactId, threadType, action: 3 }).catch(() => {});

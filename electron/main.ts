@@ -41,6 +41,7 @@ import HttpConnectionManager from '../src/services/http/HttpConnectionManager';
 import { installBossFileAuthHook, setPreferredBossWorkspace } from '../src/services/http/bossSessionAuth';
 import WorkflowEngineService from '../src/services/workflow/WorkflowEngineService';
 import WebhookGatewayService from '../src/services/workflow/WebhookGatewayService';
+import AIRoomService from '../src/services/ai/AIRoomService';
 import IntegrationRegistry from '../src/services/integrations/IntegrationRegistry';
 import EventBroadcaster from '../src/services/event/EventBroadcaster';
 import CRMQueueService from '../src/services/crm/CRMQueueService';
@@ -1662,6 +1663,8 @@ app.whenReady().then(async () => {
   }, 3700);
   // Initialize Workflow Engine after a short delay to ensure DB is ready
   setTimeout(() => WorkflowEngineService.getInstance().initialize(), 2000);
+  // Initialize AI Group & Cross-Channel Bridge listener
+  setTimeout(() => AIRoomService.getInstance().initialize(), 2200);
   // Initialize Integration Registry. integration:payment → trigger.payment is registered automatically by WorkflowEngineService
   // (rehookEvents): adding a hook here would run every payment workflow twice.
   setTimeout(() => IntegrationRegistry.initialize(), 2500);

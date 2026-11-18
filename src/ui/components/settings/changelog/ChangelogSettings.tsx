@@ -18,6 +18,42 @@ interface VersionEntry {
 // ─── Changelog data - add the new entry at the TOP of the array when there is an update ────────
 const CHANGELOG: VersionEntry[] = [
   {
+    version: '26.11.3',
+    date: '11/2026',
+    type: 'minor',
+    highlights: [
+      tr('👥 Nhóm Chat Nhiều AI (Phase 2): mời nhiều Trợ lý AI chuyên môn (Sales, CSKH, Kế toán, Quản lý...) vào chung một phòng họp để cùng phân tích, phản biện và thực thi công việc.'),
+      tr('🌐 Phòng Chat Liên Nền Tảng (Phase 3): kết nối trực tiếp Người dùng + Nhóm AI + các cuộc trò chuyện từ Zalo, Facebook Messenger và Telegram vào chung một luồng thời gian thực.'),
+      tr('🛡️ An toàn chống lặp & chống khóa nick: tin nhắn đồng bộ đi qua hàng đợi giãn cách riêng từng tài khoản, có bộ lọc chống lặp vô hạn và tùy chọn duyệt trước khi gửi ra ngoài.'),
+    ],
+    changes: [
+      {
+        category: 'new',
+        items: [
+          tr('Tạo Nhóm Chat Nhiều AI trong mục Trợ lý AI Hub: đặt tên rút gọn (@Alias), phân công vai trò riêng cho từng AI và chọn 1 trong 3 kiểu điều phối (@mention gọi đích danh, Thảo luận vòng tròn nối tiếp nhau, hoặc AI Trưởng nhóm tự chia việc và tổng hợp kết quả).'),
+          tr('Tạo Phòng Chat Liên Nền Tảng (Người + AI + Zalo / Facebook / Telegram): thêm bất kỳ hội thoại cá nhân hoặc nhóm từ Zalo, Facebook, Telegram Personal và Telegram Bot vào phòng họp AI.'),
+          tr('Mỗi cầu nối nguồn chat cho chọn riêng chiều đồng bộ (Hai chiều, Chỉ nhận vào phòng, Chỉ gửi ra ngoài) và chế độ phát tin (Duyệt thủ công trước khi gửi hoặc Tự động chuyển tiếp sang các kênh khác).'),
+          tr('Trong khung chat nhóm: hỗ trợ bấm nhanh @all hoặc @TênAI để gọi đúng trợ lý, tick chọn gửi tin đồng thời ra các hội thoại Zalo/FB/Telegram đã nối, và nút Phát câu trả lời của AI ra kênh ngay dưới từng phản hồi.'),
+        ],
+      },
+      {
+        category: 'improved',
+        items: [
+          tr('Mỗi AI tham gia phòng nhóm vẫn giữ nguyên đầy đủ bộ công cụ (CRM, Phòng ban, Công việc, Báo cáo...) theo đúng bảng phân quyền đã cấp ở v26.11.2 và nối tiếp được ngữ cảnh của các AI trả lời trước đó.'),
+          tr('Bộ lọc ngữ cảnh tới 1.000 tin nhắn hoạt động song song ngay trong từng Nhóm AI / Phòng Liên Nền Tảng.'),
+          tr('Đồng bộ trạng thái tắt thông báo (Mute) từ Zalo về Deplao: các cuộc trò chuyện cá nhân và nhóm đã tắt thông báo (1 giờ, 4 giờ, đến 8h sáng hoặc Cho đến khi mở lại) trên điện thoại / Zalo PC nay tự động đồng bộ trạng thái tắt chuông trong Deplao ngay khi kết nối tài khoản.'),
+        ],
+      },
+      {
+        category: 'security',
+        items: [
+          tr('Trang bị cơ chế chống lặp tin nhắn 2 lớp (kiểm tra dấu vân tay trước khi gửi và lưu ID tin nhắn đã phát) ngăn tuyệt đối vòng lặp bot tự trả lời nhau khi nối nhiều kênh.'),
+          tr('Toàn bộ tin chuyển tiếp từ Phòng Liên Nền Tảng ra Zalo, Facebook, Telegram đều xếp qua hàng đợi chống gửi dồn (AccountSendQueue) để bảo vệ an toàn cho tài khoản.'),
+        ],
+      },
+    ],
+  },
+  {
     version: '26.11.2',
     date: '11/2026',
     type: 'minor',

@@ -494,6 +494,7 @@ ${permSummary}
     enableTools?: boolean;
     contextBlock?: string;
     maxTokensOverride?: number;
+    extraSystemPrompt?: string;
   }): Promise<{
     result: string;
     totalTokens: number;
@@ -506,7 +507,10 @@ ${permSummary}
     if (!assistant) throw new Error(tr('Trợ lý AI không tồn tại'));
     if (!assistant.enabled) throw new Error(tr('Trợ lý AI đã bị tắt'));
 
-    const systemPrompt = await this.buildSystemPrompt(assistant, false);
+    const baseSystemPrompt = await this.buildSystemPrompt(assistant, false);
+    const systemPrompt = params.extraSystemPrompt?.trim()
+      ? `${baseSystemPrompt}\n\n${params.extraSystemPrompt.trim()}`
+      : baseSystemPrompt;
     const messages: AIProviderMessage[] = [{ role: 'system', content: systemPrompt }];
     if (params.contextBlock?.trim()) {
       messages.push(

@@ -1,11 +1,13 @@
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { app, safeStorage } from 'electron';
 import Logger from '../../utils/Logger';
 import { FB_TEMPLATE_MSG_TYPE, fbTemplateFromAttachments, fbTemplateText, isFbUnavailableTemplate, shouldUpgradeFbTemplate } from '../../shared/facebook/facebookTemplate';
 import BetterSqlite3 from 'better-sqlite3';
 import type { Account, Message, Contact, CRMNote, CRMCampaign, CRMCampaignContact, CRMSendLog, CRMCampaignStatus, CRMContactStatus } from '../../models';
 import type { AIContextFilter, ZaloCachedLabel } from '../../models/ai/ai';
+import type { AIRoom, AIRoomBridge, AIRoomMember, AIRoomMessage } from '../../models/ai/aiRoom';
 import type { TelegramPeer } from '../../models/telegram/telegram';
 import { CHANNEL } from '../../ui/lib/channels/channelHelper';
 import { getTelegramMessagePreview } from '../telegram/messages/TelegramMessagePreview';
@@ -1359,6 +1361,82 @@ class DatabaseService {
                 FOREIGN KEY(conversation_id) REFERENCES ai_conversations(id) ON DELETE CASCADE
             );
             CREATE INDEX IF NOT EXISTS idx_ai_msg_conv ON ai_conversation_messages(conversation_id);
+        `);
+
+        // ─── AI Group Rooms & Cross-Channel Bridge Rooms (Phase 2 & 3) ─────────
+        this.exec(`
+            CREATE TABLE IF NOT EXISTS ai_rooms (
+                id                  TEXT PRIMARY KEY,
+                name                TEXT NOT NULL,
+                description         TEXT NOT NULL DEFAULT '',
+                room_type           TEXT NOT NULL DEFAULT 'multi_ai',
+                routing_mode        TEXT NOT NULL DEFAULT 'mention',
+                moderator_ai_id     TEXT DEFAULT NULL,
+                ai_trigger_mode     TEXT NOT NULL DEFAULT 'all_internal',
+                context_filter_json TEXT DEFAULT NULL,
+                max_turns_per_msg   INTEGER NOT NULL DEFAULT 3,
+                enabled             INTEGER NOT NULL DEFAULT 1,
+                last_message_at     INTEGER NOT NULL DEFAULT 0,
+                created_at          INTEGER NOT NULL,
+                updated_at          INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_rooms_recent ON ai_rooms(last_message_at DESC, updated_at DESC);
+        `);
+
+        this.exec(`
+            CREATE TABLE IF NOT EXISTS ai_room_members (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                room_id          TEXT NOT NULL,
+                assistant_id     TEXT NOT NULL,
+                alias            TEXT NOT NULL DEFAULT '',
+                role_instruction TEXT NOT NULL DEFAULT '',
+                sort_order       INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(room_id, assistant_id),
+                FOREIGN KEY(room_id) REFERENCES ai_rooms(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_room_members_room ON ai_room_members(room_id, sort_order);
+        `);
+
+        this.exec(`
+            CREATE TABLE IF NOT EXISTS ai_room_bridges (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                room_id            TEXT NOT NULL,
+                account_id         TEXT NOT NULL,
+                channel            TEXT NOT NULL DEFAULT 'zalo',
+                thread_id          TEXT NOT NULL,
+                thread_type        INTEGER NOT NULL DEFAULT 0,
+                thread_name        TEXT NOT NULL DEFAULT '',
+                relay_direction    TEXT NOT NULL DEFAULT 'both',
+                outbound_mode      TEXT NOT NULL DEFAULT 'approval',
+                include_ai_replies INTEGER NOT NULL DEFAULT 1,
+                enabled            INTEGER NOT NULL DEFAULT 1,
+                created_at         INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(room_id, account_id, thread_id),
+                FOREIGN KEY(room_id) REFERENCES ai_rooms(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_room_bridges_lookup ON ai_room_bridges(account_id, thread_id, enabled);
+            CREATE INDEX IF NOT EXISTS idx_ai_room_bridges_room ON ai_room_bridges(room_id);
+        `);
+
+        this.exec(`
+            CREATE TABLE IF NOT EXISTS ai_room_messages (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                room_id            TEXT NOT NULL,
+                sender_type        TEXT NOT NULL,
+                sender_id          TEXT NOT NULL,
+                sender_name        TEXT NOT NULL DEFAULT '',
+                source_channel     TEXT DEFAULT NULL,
+                source_account_id  TEXT DEFAULT NULL,
+                source_thread_id   TEXT DEFAULT NULL,
+                source_thread_name TEXT DEFAULT NULL,
+                origin_msg_id      TEXT DEFAULT NULL,
+                content            TEXT NOT NULL DEFAULT '',
+                metadata_json      TEXT DEFAULT NULL,
+                created_at         INTEGER NOT NULL,
+                FOREIGN KEY(room_id) REFERENCES ai_rooms(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_room_messages_room ON ai_room_messages(room_id, created_at DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS idx_ai_room_messages_origin ON ai_room_messages(room_id, origin_msg_id);
         `);
 
         // ─── Facebook Integration Tables ──────────────────────────────────────────
@@ -4962,6 +5040,83 @@ class DatabaseService {
         if (sets.length === 0) return;
         vals.push(ownerZaloId, contactId);
         this.run(`UPDATE contacts SET ${sets.join(', ')} WHERE owner_zalo_id=? AND contact_id=?`, vals);
+    }
+
+    /** Sync mute state from Zalo getMute() response into contacts table */
+    public syncZaloMuteEntries(
+        zaloId: string,
+        rawMuteData: any,
+    ): Array<{ contactId: string; is_muted: number; mute_until: number }> {
+        if (!this.initialized || !zaloId || !rawMuteData) return [];
+        try {
+            const payload = rawMuteData?.data || rawMuteData;
+            const entries: any[] = [
+                ...(Array.isArray(payload?.chatEntries) ? payload.chatEntries : []),
+                ...(Array.isArray(payload?.groupChatEntries) ? payload.groupChatEntries : []),
+            ];
+            const now = Date.now();
+            const desiredMap = new Map<string, { is_muted: number; mute_until: number }>();
+
+            for (const entry of entries) {
+                const contactId = String(entry?.id || '').trim().replace(/^[ug](?=\d)/i, '');
+                if (!contactId) continue;
+
+                const duration = Number(entry?.duration ?? 0);
+                const muteMode = Number(entry?.muteMode ?? 0);
+                if (duration < 0 || muteMode === 2 || duration === 0) {
+                    desiredMap.set(contactId, { is_muted: 1, mute_until: 0 });
+                } else {
+                    const rawStart = Number(entry?.startTime || entry?.currentTime || 0);
+                    const startMs = rawStart > 0 ? (rawStart < 1e12 ? rawStart * 1000 : rawStart) : now;
+                    const untilMs = startMs + duration * 1000;
+                    if (untilMs > now) {
+                        desiredMap.set(contactId, { is_muted: 0, mute_until: untilMs });
+                    }
+                }
+            }
+
+            const existingRows = this.query<any>(
+                `SELECT contact_id, is_muted, mute_until, is_in_others FROM contacts WHERE owner_zalo_id = ?`,
+                [zaloId],
+            );
+            const existingMap = new Map<string, any>(
+                existingRows.map(r => [String(r.contact_id), r]),
+            );
+
+            const changed: Array<{ contactId: string; is_muted: number; mute_until: number }> = [];
+
+            for (const [contactId, target] of desiredMap.entries()) {
+                const cur = existingMap.get(contactId);
+                if (!cur) continue;
+                const curMuted = Number(cur.is_muted || 0);
+                const curUntil = Number(cur.mute_until || 0);
+                const same = curMuted === target.is_muted && (
+                    target.is_muted === 1 || Math.abs(curUntil - target.mute_until) < 5000
+                );
+                if (!same) {
+                    this.setContactFlags(zaloId, contactId, target);
+                    changed.push({ contactId, ...target });
+                }
+            }
+
+            for (const row of existingRows) {
+                const contactId = String(row.contact_id);
+                if (desiredMap.has(contactId)) continue;
+                if (Number(row.is_in_others || 0) === 1) continue;
+                const curMuted = Number(row.is_muted || 0);
+                const curUntil = Number(row.mute_until || 0);
+                if (curMuted === 1 || curUntil > 0) {
+                    this.setContactFlags(zaloId, contactId, { is_muted: 0, mute_until: 0 });
+                    changed.push({ contactId, is_muted: 0, mute_until: 0 });
+                }
+            }
+
+            if (changed.length > 0) this.save();
+            return changed;
+        } catch (err: any) {
+            Logger.warn(`[DatabaseService] syncZaloMuteEntries(${zaloId}) failed: ${err?.message || err}`);
+            return [];
+        }
     }
 
     /** Auto-delete messages on Zalo (ms, ZL-05) of a conversation; true when the value really changed. */
@@ -11628,6 +11783,339 @@ class DatabaseService {
         } catch (err: any) {
             Logger.error(`[DB] queryMessagesForAIContext: ${err.message}`);
             return { messages: [], formattedContext: '', count: 0, threadCount: 0 };
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // AI GROUP ROOMS & CROSS-CHANNEL BRIDGES (Phase 2 & 3)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    private mapAIRoomRow(
+        r: any,
+        membersByRoom: Map<string, AIRoomMember[]>,
+        bridgesByRoom: Map<string, AIRoomBridge[]>,
+    ): AIRoom {
+        return {
+            id: String(r.id),
+            name: String(r.name || ''),
+            description: String(r.description || ''),
+            roomType: r.room_type === 'bridge' ? 'bridge' : 'multi_ai',
+            routingMode: (r.routing_mode === 'round_table' || r.routing_mode === 'moderator') ? r.routing_mode : 'mention',
+            moderatorAiId: r.moderator_ai_id || null,
+            aiTriggerMode: (['all_internal', 'all_messages', 'mention_only', 'manual'].includes(r.ai_trigger_mode) ? r.ai_trigger_mode : 'all_internal') as AIRoom['aiTriggerMode'],
+            contextFilterJson: r.context_filter_json || null,
+            maxTurnsPerMsg: Math.min(8, Math.max(1, Number(r.max_turns_per_msg) || 3)),
+            enabled: r.enabled !== 0,
+            lastMessageAt: Number(r.last_message_at) || 0,
+            createdAt: Number(r.created_at) || 0,
+            updatedAt: Number(r.updated_at) || 0,
+            members: membersByRoom.get(String(r.id)) || [],
+            bridges: bridgesByRoom.get(String(r.id)) || [],
+            messageCount: r.message_count != null ? Number(r.message_count) : undefined,
+        };
+    }
+
+    private mapAIRoomMemberRow(m: any): AIRoomMember {
+        return {
+            id: Number(m.id),
+            roomId: String(m.room_id),
+            assistantId: String(m.assistant_id),
+            alias: String(m.alias || ''),
+            roleInstruction: String(m.role_instruction || ''),
+            sortOrder: Number(m.sort_order) || 0,
+            assistantName: m.assistant_name ? String(m.assistant_name) : undefined,
+            platform: m.platform ? String(m.platform) : undefined,
+            model: m.model ? String(m.model) : undefined,
+        };
+    }
+
+    private mapAIRoomBridgeRow(b: any): AIRoomBridge {
+        return {
+            id: Number(b.id),
+            roomId: String(b.room_id),
+            accountId: String(b.account_id),
+            channel: (['zalo', 'facebook', 'telegram_user', 'telegram_bot'].includes(b.channel) ? b.channel : 'zalo') as AIRoomBridge['channel'],
+            threadId: String(b.thread_id),
+            threadType: Number(b.thread_type) || 0,
+            threadName: String(b.thread_name || b.thread_id),
+            relayDirection: (b.relay_direction === 'inbound_only' || b.relay_direction === 'outbound_only') ? b.relay_direction : 'both',
+            outboundMode: b.outbound_mode === 'auto_relay' ? 'auto_relay' : 'approval',
+            includeAiReplies: b.include_ai_replies !== 0,
+            enabled: b.enabled !== 0,
+            createdAt: Number(b.created_at) || 0,
+        };
+    }
+
+    private mapAIRoomMessageRow(m: any): AIRoomMessage {
+        let meta: any = undefined;
+        if (m.metadata_json) {
+            try { meta = JSON.parse(m.metadata_json); } catch {}
+        }
+        return {
+            id: Number(m.id),
+            roomId: String(m.room_id),
+            senderType: m.sender_type,
+            senderId: String(m.sender_id || ''),
+            senderName: String(m.sender_name || ''),
+            sourceChannel: m.source_channel || null,
+            sourceAccountId: m.source_account_id || null,
+            sourceThreadId: m.source_thread_id || null,
+            sourceThreadName: m.source_thread_name || null,
+            originMsgId: m.origin_msg_id || null,
+            content: String(m.content || ''),
+            metadataJson: m.metadata_json || null,
+            meta,
+            createdAt: Number(m.created_at) || 0,
+        };
+    }
+
+    public listAIRooms(): AIRoom[] {
+        if (!this.initialized) return [];
+        try {
+            const roomRows = this.query<any>(
+                `SELECT r.*,
+                        (SELECT COUNT(*) FROM ai_room_messages m WHERE m.room_id = r.id) AS message_count
+                 FROM ai_rooms r
+                 ORDER BY CASE WHEN r.last_message_at > 0 THEN r.last_message_at ELSE r.updated_at END DESC`
+            );
+            if (!roomRows.length) return [];
+
+            const memberRows = this.query<any>(
+                `SELECT rm.*, a.name AS assistant_name, a.platform, a.model
+                 FROM ai_room_members rm
+                 LEFT JOIN ai_assistants a ON a.id = rm.assistant_id
+                 ORDER BY rm.sort_order ASC, rm.id ASC`
+            );
+            const bridgeRows = this.query<any>(`SELECT * FROM ai_room_bridges ORDER BY id ASC`);
+
+            const membersByRoom = new Map<string, AIRoomMember[]>();
+            for (const m of memberRows) {
+                const list = membersByRoom.get(String(m.room_id)) || [];
+                list.push(this.mapAIRoomMemberRow(m));
+                membersByRoom.set(String(m.room_id), list);
+            }
+            const bridgesByRoom = new Map<string, AIRoomBridge[]>();
+            for (const b of bridgeRows) {
+                const list = bridgesByRoom.get(String(b.room_id)) || [];
+                list.push(this.mapAIRoomBridgeRow(b));
+                bridgesByRoom.set(String(b.room_id), list);
+            }
+            return roomRows.map(r => this.mapAIRoomRow(r, membersByRoom, bridgesByRoom));
+        } catch (err: any) {
+            Logger.error(`[DB] listAIRooms: ${err.message}`);
+            return [];
+        }
+    }
+
+    public getAIRoom(roomId: string): AIRoom | null {
+        if (!this.initialized || !roomId) return null;
+        try {
+            const r = this.queryOne<any>(
+                `SELECT r.*, (SELECT COUNT(*) FROM ai_room_messages m WHERE m.room_id = r.id) AS message_count
+                 FROM ai_rooms r WHERE r.id = ?`,
+                [roomId]
+            );
+            if (!r) return null;
+            const memberRows = this.query<any>(
+                `SELECT rm.*, a.name AS assistant_name, a.platform, a.model
+                 FROM ai_room_members rm
+                 LEFT JOIN ai_assistants a ON a.id = rm.assistant_id
+                 WHERE rm.room_id = ?
+                 ORDER BY rm.sort_order ASC, rm.id ASC`,
+                [roomId]
+            );
+            const bridgeRows = this.query<any>(
+                `SELECT * FROM ai_room_bridges WHERE room_id = ? ORDER BY id ASC`,
+                [roomId]
+            );
+            const membersByRoom = new Map<string, AIRoomMember[]>([[roomId, memberRows.map(m => this.mapAIRoomMemberRow(m))]]);
+            const bridgesByRoom = new Map<string, AIRoomBridge[]>([[roomId, bridgeRows.map(b => this.mapAIRoomBridgeRow(b))]]);
+            return this.mapAIRoomRow(r, membersByRoom, bridgesByRoom);
+        } catch (err: any) {
+            Logger.error(`[DB] getAIRoom: ${err.message}`);
+            return null;
+        }
+    }
+
+    public saveAIRoom(input: Partial<AIRoom> & { name: string }): AIRoom {
+        const now = Date.now();
+        const id = input.id || `room_${crypto.randomUUID()}`;
+        const existing = input.id ? this.getAIRoom(input.id) : null;
+        const bridges = Array.isArray(input.bridges) ? input.bridges : (existing?.bridges || []);
+        const members = Array.isArray(input.members) ? input.members : (existing?.members || []);
+        const roomType: AIRoom['roomType'] = input.roomType || (bridges.length > 0 ? 'bridge' : 'multi_ai');
+        const routingMode: AIRoom['routingMode'] = input.routingMode || existing?.routingMode || 'mention';
+        const aiTriggerMode: AIRoom['aiTriggerMode'] = input.aiTriggerMode || existing?.aiTriggerMode || (roomType === 'bridge' ? 'mention_only' : 'all_internal');
+        const maxTurns = Math.min(8, Math.max(1, Number(input.maxTurnsPerMsg ?? existing?.maxTurnsPerMsg ?? 3)));
+
+        this.transaction(() => {
+            this.run(
+                `INSERT INTO ai_rooms (id, name, description, room_type, routing_mode, moderator_ai_id, ai_trigger_mode, context_filter_json, max_turns_per_msg, enabled, last_message_at, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET
+                   name = excluded.name,
+                   description = excluded.description,
+                   room_type = excluded.room_type,
+                   routing_mode = excluded.routing_mode,
+                   moderator_ai_id = excluded.moderator_ai_id,
+                   ai_trigger_mode = excluded.ai_trigger_mode,
+                   context_filter_json = excluded.context_filter_json,
+                   max_turns_per_msg = excluded.max_turns_per_msg,
+                   enabled = excluded.enabled,
+                   updated_at = excluded.updated_at`,
+                [
+                    id,
+                    String(input.name || 'Nhóm AI').trim(),
+                    String(input.description ?? existing?.description ?? ''),
+                    roomType,
+                    routingMode,
+                    input.moderatorAiId !== undefined ? input.moderatorAiId : (existing?.moderatorAiId ?? null),
+                    aiTriggerMode,
+                    input.contextFilterJson !== undefined ? input.contextFilterJson : (existing?.contextFilterJson ?? null),
+                    maxTurns,
+                    input.enabled !== false ? 1 : 0,
+                    existing?.lastMessageAt || now,
+                    existing?.createdAt || now,
+                    now,
+                ]
+            );
+
+            if (Array.isArray(input.members)) {
+                this.run(`DELETE FROM ai_room_members WHERE room_id = ?`, [id]);
+                const seen = new Set<string>();
+                input.members.forEach((m, idx) => {
+                    const aid = String(m?.assistantId || '').trim();
+                    if (!aid || seen.has(aid)) return;
+                    seen.add(aid);
+                    const alias = String(m.alias || '').trim().replace(/^@+/, '');
+                    this.run(
+                        `INSERT INTO ai_room_members (room_id, assistant_id, alias, role_instruction, sort_order) VALUES (?, ?, ?, ?, ?)`,
+                        [id, aid, alias, String(m.roleInstruction || ''), m.sortOrder ?? idx]
+                    );
+                });
+            }
+
+            if (Array.isArray(input.bridges)) {
+                this.run(`DELETE FROM ai_room_bridges WHERE room_id = ?`, [id]);
+                const seenB = new Set<string>();
+                input.bridges.forEach((b) => {
+                    const accId = String(b?.accountId || '').trim();
+                    const tid = String(b?.threadId || '').trim();
+                    if (!accId || !tid) return;
+                    const key = `${accId}:${tid}`;
+                    if (seenB.has(key)) return;
+                    seenB.add(key);
+                    this.run(
+                        `INSERT INTO ai_room_bridges (room_id, account_id, channel, thread_id, thread_type, thread_name, relay_direction, outbound_mode, include_ai_replies, enabled, created_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                        [
+                            id,
+                            accId,
+                            String(b.channel || 'zalo'),
+                            tid,
+                            Number(b.threadType) === 1 ? 1 : 0,
+                            String(b.threadName || tid),
+                            b.relayDirection || 'both',
+                            b.outboundMode || 'approval',
+                            b.includeAiReplies !== false ? 1 : 0,
+                            b.enabled !== false ? 1 : 0,
+                            now,
+                        ]
+                    );
+                });
+            }
+        });
+        this.save();
+        return this.getAIRoom(id)!;
+    }
+
+    public deleteAIRoom(roomId: string): void {
+        if (!this.initialized || !roomId) return;
+        this.transaction(() => {
+            this.run(`DELETE FROM ai_room_messages WHERE room_id = ?`, [roomId]);
+            this.run(`DELETE FROM ai_room_members WHERE room_id = ?`, [roomId]);
+            this.run(`DELETE FROM ai_room_bridges WHERE room_id = ?`, [roomId]);
+            this.run(`DELETE FROM ai_rooms WHERE id = ?`, [roomId]);
+        });
+        this.save();
+    }
+
+    public getAIRoomMessages(roomId: string, limit = 200): AIRoomMessage[] {
+        if (!this.initialized || !roomId) return [];
+        try {
+            const safeLimit = Math.min(500, Math.max(1, Number(limit) || 200));
+            const rows = this.query<any>(
+                `SELECT * FROM ai_room_messages WHERE room_id = ? ORDER BY created_at DESC, id DESC LIMIT ?`,
+                [roomId, safeLimit]
+            );
+            return rows.reverse().map(m => this.mapAIRoomMessageRow(m));
+        } catch (err: any) {
+            Logger.error(`[DB] getAIRoomMessages: ${err.message}`);
+            return [];
+        }
+    }
+
+    public addAIRoomMessage(msg: Omit<AIRoomMessage, 'id' | 'createdAt'> & { createdAt?: number }): AIRoomMessage {
+        const now = msg.createdAt ?? Date.now();
+        const metaJson = msg.metadataJson !== undefined
+            ? msg.metadataJson
+            : (msg.meta ? JSON.stringify(msg.meta) : null);
+        const id = this.runInsert(
+            `INSERT INTO ai_room_messages
+               (room_id, sender_type, sender_id, sender_name, source_channel, source_account_id, source_thread_id, source_thread_name, origin_msg_id, content, metadata_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                msg.roomId,
+                msg.senderType,
+                msg.senderId || '',
+                msg.senderName || '',
+                msg.sourceChannel ?? null,
+                msg.sourceAccountId ?? null,
+                msg.sourceThreadId ?? null,
+                msg.sourceThreadName ?? null,
+                msg.originMsgId ?? null,
+                msg.content || '',
+                metaJson,
+                now,
+            ]
+        );
+        this.run(`UPDATE ai_rooms SET last_message_at = ?, updated_at = ? WHERE id = ?`, [now, now, msg.roomId]);
+        const row = this.queryOne<any>(`SELECT * FROM ai_room_messages WHERE id = ?`, [id]);
+        return row ? this.mapAIRoomMessageRow(row) : { ...msg, id, metadataJson: metaJson, createdAt: now };
+    }
+
+    public updateAIRoomMessageMeta(messageId: number, metadataJson: string): void {
+        if (!this.initialized || !messageId) return;
+        this.run(`UPDATE ai_room_messages SET metadata_json = ? WHERE id = ?`, [metadataJson, messageId]);
+    }
+
+    public hasAIRoomOriginMessage(roomId: string, originMsgId: string): boolean {
+        if (!this.initialized || !roomId || !originMsgId) return false;
+        const row = this.queryOne<any>(
+            `SELECT 1 FROM ai_room_messages WHERE room_id = ? AND origin_msg_id = ? LIMIT 1`,
+            [roomId, originMsgId]
+        );
+        return !!row;
+    }
+
+    public findActiveInboundBridges(accountId: string, threadId: string): AIRoomBridge[] {
+        if (!this.initialized || !accountId || !threadId) return [];
+        try {
+            const rows = this.query<any>(
+                `SELECT b.*
+                 FROM ai_room_bridges b
+                 JOIN ai_rooms r ON r.id = b.room_id
+                 WHERE r.enabled = 1
+                   AND b.enabled = 1
+                   AND b.relay_direction IN ('both', 'inbound_only')
+                   AND b.account_id = ?
+                   AND b.thread_id = ?`,
+                [accountId, threadId]
+            );
+            return rows.map(b => this.mapAIRoomBridgeRow(b));
+        } catch (err: any) {
+            Logger.error(`[DB] findActiveInboundBridges: ${err.message}`);
+            return [];
         }
     }
 }

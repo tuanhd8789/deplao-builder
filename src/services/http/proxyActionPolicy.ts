@@ -31,6 +31,7 @@ export const EMPLOYEE_PROXY_IPC_CHANNELS: ReadonlySet<string> = new Set([
   'ai:getAccountAssistants', 'ai:getUsageLogs', 'ai:getUsageStats',
   'ai:chatWithTools', 'ai:executeToolAction', 'ai:getContextFilterOptions', 'ai:getContextSenders', 'ai:queryContextMessages',
   'ai:createConversation', 'ai:listAllConversations', 'ai:updateConversationMeta', 'ai:updateMessageMeta',
+  'ai:room:list', 'ai:room:get', 'ai:room:save', 'ai:room:delete', 'ai:room:getMessages', 'ai:room:sendMessage', 'ai:room:triggerAI', 'ai:room:broadcastMessage', 'ai:room:updateMessageMeta',
   // CRM (module crm)
   'crm:saveNote', 'crm:deleteNote', 'crm:saveCampaign', 'crm:deleteCampaign', 'crm:cloneCampaign',
   'crm:updateCampaignStatus', 'crm:addCampaignContacts', 'crm:deleteCampaignContacts', 'crm:deleteAllCampaignContacts',

@@ -362,6 +362,13 @@ export function registerWorkspaceIpc(mainWindow: BrowserWindow | null): void {
                     Logger.error(`[workspaceIpc] Workflow rehookEvents failed: ${err?.message || err}`);
                 }
 
+                // AI Rooms: re-register cross-channel inbound listeners after clearBeforeSendHooks()
+                try {
+                    require('../../../src/services/ai/AIRoomService').default.getInstance().rehookEvents();
+                } catch (err: any) {
+                    Logger.error(`[workspaceIpc] AIRoom rehookEvents failed: ${err?.message || err}`);
+                }
+
                 // Plugins: the local workspace running in the background changed → stop the old workspace's plugins, run the enabled plugins of the new workspace
                 // (background). Switching to / leaving an employee workspace: plugins keep running, only the UI is told to reload.
                 try {
