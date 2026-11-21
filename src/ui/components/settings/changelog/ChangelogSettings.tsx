@@ -18,6 +18,37 @@ interface VersionEntry {
 // ─── Changelog data - add the new entry at the TOP of the array when there is an update ────────
 const CHANGELOG: VersionEntry[] = [
   {
+    version: '26.11.4',
+    date: '11/2026',
+    type: 'minor',
+    highlights: [
+      tr('🔄 Đồng bộ đầy đủ bản cập nhật mới nhất từ Deplao gốc (v26.11.2): thả cảm xúc giống Zalo & Telegram, kho sticker Zalo 50+182 bộ miễn phí, chiến dịch gửi video/tệp & tự gắn nhãn, Messenger realtime, Telegram album ảnh và hết màn hình đen sau khi mở máy.'),
+      tr('🩺 Sửa dứt điểm lỗi bấm vào Cài đặt → Tài khoản bị màn hình trắng (sửa vòng lặp render Zustand v5 khi đọc trạng thái tự động tải file của từng tài khoản và hội thoại).'),
+      tr('🧩 Giữ trọn toàn bộ tính năng nâng cao: Trợ lý AI toàn app với 28 công cụ (CRM/Phòng ban/Công việc/Báo cáo, chặn Xóa), Nhóm Nhiều AI (Phase 2), Phòng Liên Nền Tảng (Phase 3), lọc nhãn Zalo trong AI, tự động tải file 3 cấp và đồng bộ tắt thông báo Zalo.'),
+    ],
+    changes: [
+      {
+        category: 'new',
+        items: [
+          tr('Gộp toàn bộ nâng cấp từ Deplao gốc v26.11.2: kho sticker Zalo (50 bộ sẵn + 182 bộ tải thêm miễn phí, gợi ý từ 1 ký tự), thả cảm xúc Zalo & Telegram mới, chiến dịch gửi video/tệp + gắn nhãn sau khi gửi + biến {gender}/{phone}, chiến dịch Facebook và gửi album ảnh Telegram.'),
+        ],
+      },
+      {
+        category: 'improved',
+        items: [
+          tr('Cập nhật cầu nối Messenger E2EE (fbchat-bridge-e2ee & login bridge) mới nhất từ Deplao gốc để tin nhắn về realtime ổn định.'),
+          tr('Hết hiện tượng màn hình đen sau khi gập máy hoặc khóa màn hình Windows; có màn hình chờ rõ ràng khi khởi động hoặc đổi ngôn ngữ.'),
+        ],
+      },
+      {
+        category: 'fixed',
+        items: [
+          tr('Sửa lỗi bấm vào Cài đặt → Tài khoản bị màn hình trắng (lỗi tạo object mới không dùng useShallow trong useAccountAutoDownloadState và useThreadAutoDownloadState dưới Zustand v5).'),
+        ],
+      },
+    ],
+  },
+  {
     version: '26.11.3',
     date: '11/2026',
     type: 'minor',
@@ -58,16 +89,23 @@ const CHANGELOG: VersionEntry[] = [
     date: '11/2026',
     type: 'minor',
     highlights: [
-      tr('🤖 Trợ lý AI toàn ứng dụng & Không gian chat AI riêng: mở khung AI ở bất kỳ màn hình nào, kéo co giãn thanh bên mượt mà không che khuất tin nhắn.'),
-      tr('🛠️ AI hỗ trợ quản lý trọn bộ Deplao: tạo & cập nhật Phòng ban, Chức vụ, Nhân sự, Dự án, Công việc, Lịch hẹn, Ghi chú, Nhãn & Chiến dịch CRM, và lập Báo cáo công việc.'),
-      tr('🛡️ Phân quyền chi tiết từng Trợ lý AI & Khóa cứng quyền Xóa: chọn rõ từng mục được Tắt, Chỉ đọc hay Tạo & Sửa; AI bị chặn tuyệt đối việc xóa dữ liệu.'),
-      tr('🎯 Lọc thông minh tới 1.000 tin nhắn (cả Nhãn Zalo & Nhãn Deplao): chọn khoảng thời gian, hội thoại, cá nhân/nhóm, người gửi và nhãn để AI tổng hợp chính xác.'),
-      tr('📥 Chủ động bật / tắt tự động tải file đính kèm 3 cấp độ: cài cho toàn phần mềm, từng tài khoản hoặc từng cuộc trò chuyện để tiết kiệm ổ cứng.'),
+      tr('😀 Thả cảm xúc giống Zalo và Telegram: tin Zalo có nút ở góc tin, thanh 👍 ❤️ 😆 😮 😭 😡 và nút ✕ để gỡ; tin Telegram có cảm xúc nằm trong khung tin, nháy đúp để thả nhanh.'),
+      tr('🧸 Kho sticker Zalo như trên Zalo: 50 bộ có sẵn, nút + thêm 182 bộ miễn phí, gợi ý sticker hiện ngay từ 1 ký tự.'),
+      tr('📣 Chiến dịch gửi được video và tệp, tự gắn nhãn cho người đã gửi xong, có thêm biến {gender} và {phone}; Facebook chạy được chiến dịch nhắn tin.'),
+      tr('🖼️ Telegram gửi và chuyển tiếp nhiều ảnh thành một album; hết màn hình đen sau khi gập máy hay khoá màn hình; mở app có màn hình chờ thay cho cửa sổ tối trống.'),
+      tr('🤖 Trợ lý AI toàn ứng dụng & Quản trị trọn bộ Deplao (CRM, Phòng ban, Công việc, Báo cáo) kèm phân quyền chi tiết và khóa cứng quyền Xóa.'),
+      tr('🎯 Lọc thông minh tới 1.000 tin nhắn (cả Nhãn Zalo & Nhãn Deplao) và tùy chọn bật/tắt tự động tải file đính kèm 3 cấp độ.'),
     ],
     changes: [
       {
         category: 'new',
         items: [
+          tr('Kho sticker Zalo như trên Zalo: 50 bộ sticker có tên và ảnh đại diện (Trọc Trắng, Mèo Méo Meo…), cuộn xem liền từng bộ, thanh chọn bộ ở dưới. Mở bảng sticker là vào thẳng kho, không phải chờ tải hay bấm Tải kho sticker như trước.'),
+          tr('Nút + cuối thanh chọn bộ mở thêm 182 bộ sticker khác của Zalo, đều miễn phí: bấm Tải về là bộ có ngay trong kho, bấm Gỡ để bỏ ra.'),
+          tr('Chiến dịch gửi kèm video và tệp (Zalo, Telegram, Telegram Bot, Facebook): form chiến dịch có ô Đính kèm video và Đính kèm tệp; gửi theo thứ tự chữ, ảnh, video, tệp, mỗi video và mỗi tệp là một tin riêng.'),
+          tr('Chiến dịch có mục Gắn nhãn khi gửi xong: chọn nhiều nhãn Local và một nhãn Zalo (chỉ kênh Zalo), chỉ gắn cho người đã gửi thành công, kể cả chiến dịch kết bạn và mời vào nhóm. Zalo chỉ cho một nhãn mỗi hội thoại nên nhãn Zalo mới thay nhãn cũ.'),
+          tr('Chiến dịch có thêm biến {gender} (giới tính) và {phone} (số điện thoại), dùng được cả trong lời mời kết bạn; nút ? cạnh Chèn biến cho biết biến nào dùng được ở kênh nào và lấy giá trị từ đâu.'),
+          tr('Facebook: tài khoản Facebook có tab Chiến dịch và nút Thêm vào chiến dịch để gửi chiến dịch nhắn tin (chưa có chiến dịch kết bạn, mời vào nhóm); tài khoản chưa kết nối thì chiến dịch chờ thay vì báo gửi lỗi.'),
           tr('Chat với Trợ lý AI trên toàn bộ ứng dụng: bấm nút AI ở thanh trên cùng để mở khung trợ lý ngay trên mọi trang (Dashboard, CRM, Công việc, Cài đặt...), hoặc mở mục Trợ lý AI toàn màn hình từ thanh bên trái để trò chuyện riêng như một danh bạ.'),
           tr('Bộ lọc ngữ cảnh đa chiều tới 1.000 tin nhắn: chọn khoảng thời gian (Hôm nay, Hôm qua, 7 ngày, 30 ngày, tự chọn), chọn một/nhiều/tất cả hội thoại, lọc Chat 1-1 hay Nhóm, chọn nhiều người gửi, tìm từ khóa, và lọc theo Nhãn Deplao, Tag CRM hoặc Nhãn gốc trên Zalo (có nút đồng bộ nhanh).'),
           tr('Bộ công cụ AI quản lý toàn bộ nghiệp vụ Deplao: xem cơ cấu & tạo/cập nhật Phòng ban, Chức vụ, hồ sơ Nhân sự, Chấm công & Nghỉ phép; tạo/sửa Dự án, Công việc, Checklist, Bình luận, Lịch hẹn, Ghi chú ERP; cập nhật Khách hàng CRM, Ghi chú CRM, Nhãn/Tag, Chiến dịch nháp; tra cứu POS và lập Báo cáo tổng hợp công việc.'),
@@ -78,6 +116,14 @@ const CHANGELOG: VersionEntry[] = [
       {
         category: 'improved',
         items: [
+          tr('Thả cảm xúc tin Zalo giống Zalo: nút ở góc phải dưới tin, bấm là thả 👍 (hoặc cảm xúc vừa thả), mỗi lần bấm +1; giữ chuột hiện thanh 👍 ❤️ 😆 😮 😭 😡 và nút ✕ gỡ hết cảm xúc của mình; bấm ô tổng để xem ai đã thả.'),
+          tr('Thả cảm xúc tin Telegram giống Telegram: cảm xúc nằm trong khung tin, ô của mình tô màu, ít người thả thì hiện ảnh đại diện; bấm ô để thả hoặc gỡ; nháy đúp tin hoặc bấm nút để thả cảm xúc nhanh đã chọn trong Telegram; chuột phải → "N cảm xúc" để xem ai thả.'),
+          tr('Gợi ý sticker khi soạn tin Zalo và ô tìm sticker chạy từ 1 ký tự (vd "hi", "ok", "cảm ơn") và hiện ra ngay nhờ bảng từ khoá của Zalo có sẵn trong app; trước đây phải gõ từ 3 ký tự rồi chờ mạng.'),
+          tr('Telegram và Telegram Bot: gửi nhiều ảnh cùng lúc (chọn nhiều ảnh, dán, kéo thả, chọn từ thư viện, tin nhắn nhanh, chiến dịch, API) thành một album, tối đa 10 ảnh mỗi album, thay vì mỗi ảnh một tin; dùng được trong chủ đề và khi trả lời.'),
+          tr('Telegram: chuyển tiếp nhiều ảnh liền nhau thành một album, giữ đúng thứ tự; chú thích đầu tiên đi cùng album, chú thích khác gửi riêng.'),
+          tr('Hộp chuyển tiếp tin: ô Tài khoản gửi hiện ảnh đại diện và biểu tượng kênh của từng tài khoản.'),
+          tr('Lúc mở app hay tải lại giao diện (vd đổi ngôn ngữ), Deplao hiện màn hình chờ có thanh chạy và chữ Đang tải giao diện thay cho cửa sổ tối trống; quá 8 giây thì báo đang tải lâu hơn thường lệ. Màn hình chờ theo đúng giao diện sáng / tối đã chọn.'),
+          tr('Cài đặt → Nhật ký ghi lúc máy ngủ, thức dậy, mở khoá màn hình, giao diện mất bao lâu để hiện lại và khi phần vẽ giao diện bị lỗi, để dễ tìm nguyên nhân khi app chậm sau khi mở máy.'),
           tr('Khi mở hoặc trượt thanh bên Thông tin hội thoại / Trợ lý AI, khung tin nhắn ở giữa tự động co lại vừa khít để không bị che khuất nội dung; có thể kéo mép để đổi độ rộng.'),
           tr('Khung trả lời của AI hiển thị định dạng đẹp mắt (bảng so sánh, tiêu đề, danh sách, code block) và có nút Xác nhận tất cả khi AI đề xuất tạo hoặc sửa nhiều mục cùng lúc.'),
           tr('Khung Chat thử trong trang cài đặt Trợ lý AI có thêm chế độ Trợ lý & Công cụ giúp kiểm tra ngay các quyền vừa thiết lập.'),
@@ -86,6 +132,10 @@ const CHANGELOG: VersionEntry[] = [
       {
         category: 'fixed',
         items: [
+          tr('Facebook: sửa tin Messenger không về ngay: cầu nối nhận tin được cập nhật theo thay đổi mới của Meta.'),
+          tr('Sửa gỡ cảm xúc Zalo trên điện thoại mà Deplao vẫn hiện; workflow "Khi có cảm xúc" nay nhận đúng cảm xúc Zalo và lọc đúng loại; Telegram Bot gỡ cảm xúc được.'),
+          tr('Sửa cửa sổ Deplao trên Windows đen rất lâu sau khi gập máy hoặc khoá màn hình rồi mở lại: nay giữ nguyên hình đang có và cập nhật ngay khi máy sẵn sàng.'),
+          tr('Sửa giao diện chậm phản hồi (thường ngay sau khi mở máy) bị tải lại ngay, mất hội thoại đang mở và hiện cửa sổ trống: nay Deplao chờ thêm 45 giây, giao diện tự phản hồi lại thì không tải lại.'),
           tr('Sửa bộ lọc theo Nhãn trong Trợ lý AI chưa lọc được các cuộc trò chuyện gắn Nhãn Zalo: nay tìm và lọc chuẩn cả Nhãn Zalo lẫn Nhãn Deplao và Tag CRM.'),
           tr('Sửa lỗi đồng bộ tin nhắn từ Zalo điện thoại (Mobile Sync) báo lỗi quá sớm khi máy chủ đang tạo bản sao lưu; nay tự động chờ bản sao lưu sẵn sàng trước khi tải.'),
         ],

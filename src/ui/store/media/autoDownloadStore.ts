@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import ipc from '@/lib/ipc';
 import { useAccountStore } from '../accounts/accountStore';
 import {
@@ -156,14 +157,16 @@ export function useAccountAutoDownloadState(accountId?: string | null): {
   effective: boolean;
   globalEnabled: boolean;
 } {
-  return useAutoDownloadStore((s) => {
-    const alt = resolveAccountAlias(accountId);
-    return {
-      mode: getAccountAutoDownloadMode(s.prefs, accountId, alt),
-      effective: resolveEffectiveAccountAutoDownload(s.prefs, accountId, alt),
-      globalEnabled: s.prefs.globalEnabled,
-    };
-  });
+  return useAutoDownloadStore(
+    useShallow((s) => {
+      const alt = resolveAccountAlias(accountId);
+      return {
+        mode: getAccountAutoDownloadMode(s.prefs, accountId, alt),
+        effective: resolveEffectiveAccountAutoDownload(s.prefs, accountId, alt),
+        globalEnabled: s.prefs.globalEnabled,
+      };
+    }),
+  );
 }
 
 export function useThreadAutoDownloadState(accountId?: string | null, threadId?: string | null): {
@@ -171,11 +174,13 @@ export function useThreadAutoDownloadState(accountId?: string | null, threadId?:
   effective: boolean;
   inheritedEffective: boolean;
 } {
-  return useAutoDownloadStore((s) => {
-    const alt = resolveAccountAlias(accountId);
-    const mode = getThreadAutoDownloadMode(s.prefs, accountId, threadId, alt);
-    const inheritedEffective = resolveEffectiveAccountAutoDownload(s.prefs, accountId, alt);
-    const effective = mode === 'on' ? true : mode === 'off' ? false : inheritedEffective;
-    return { mode, effective, inheritedEffective };
-  });
+  return useAutoDownloadStore(
+    useShallow((s) => {
+      const alt = resolveAccountAlias(accountId);
+      const mode = getThreadAutoDownloadMode(s.prefs, accountId, threadId, alt);
+      const inheritedEffective = resolveEffectiveAccountAutoDownload(s.prefs, accountId, alt);
+      const effective = mode === 'on' ? true : mode === 'off' ? false : inheritedEffective;
+      return { mode, effective, inheritedEffective };
+    }),
+  );
 }

@@ -1,5 +1,23 @@
 # Nhật ký thay đổi — Deplao
 
+## v26.11.4 (22/11/2026)
+
+### Điểm nổi bật
+- **Gộp bản cập nhật mới nhất từ Deplao gốc (`v26.11.2`)**: Thả cảm xúc kiểu mới cho Zalo & Telegram, kho sticker Zalo 50 bộ có sẵn + 182 bộ tải thêm miễn phí (gợi ý từ 1 ký tự), chiến dịch gửi video & tệp kèm tự gắn nhãn & biến `{gender}` / `{phone}`, chiến dịch Facebook & Messenger realtime, gửi album ảnh Telegram, màn hình chờ và khắc phục màn hình đen sau khi mở máy.
+- **Sửa lỗi bấm vào Cài đặt → Tài khoản bị màn hình trắng**: Sửa vòng lặp render Zustand v5 trong `useAccountAutoDownloadState` và `useThreadAutoDownloadState` bằng `useShallow`.
+- **Giữ trọn toàn bộ tính năng nâng cao**: Trợ lý AI toàn app với 28 công cụ (CRM, Phòng ban, Công việc, Báo cáo, khóa cứng chống xóa), Nhóm Nhiều AI (Phase 2), Phòng Liên Nền Tảng (Phase 3), lọc nhãn Zalo trong AI, tự động tải file 3 cấp và đồng bộ tắt thông báo Zalo.
+
+### Chi tiết
+- **Hợp nhất Deplao gốc v26.11.2**:
+  - **Cảm xúc Zalo & Telegram**: Nút cảm xúc ở góc tin Zalo (giữ để chọn 👍 ❤️ 😆 😮 😭 😡, bấm `✕` để gỡ); cảm xúc Telegram hiển thị ngay trong khung tin, hỗ trợ nháy đúp thả nhanh và xem danh sách người thả.
+  - **Kho sticker Zalo**: 50 bộ mở trực tiếp không cần tải trước, nút `+` thêm 182 bộ miễn phí, tìm và gợi ý từ 1 ký tự nhờ bảng từ khóa cục bộ.
+  - **Chiến dịch & Kênh chat**: Đính kèm video/tệp khi gửi chiến dịch, tự gắn nhãn Local & Zalo cho người gửi thành công, thêm biến `{gender}` và `{phone}`; Facebook hỗ trợ chiến dịch nhắn tin và cập nhật bridge E2EE mới nhất; Telegram gửi/chuyển tiếp nhiều ảnh gộp thành 1 album (tối đa 10 ảnh).
+  - **Trải nghiệm cửa sổ Windows**: Màn hình chờ sáng/tối khi khởi động hoặc tải lại, chống màn hình đen sau sleep/khóa máy.
+- **Sửa lỗi**:
+  - Sửa lỗi màn hình trắng khi mở **Cài đặt → Tài khoản** (hoặc bảng **Thông tin hội thoại**) do selector trả về object mới thiếu `useShallow` trên Zustand v5.
+
+---
+
 ## v26.11.3 (18/11/2026)
 
 ### Điểm nổi bật
