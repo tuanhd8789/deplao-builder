@@ -233,7 +233,7 @@ export default function App() {
     showGroupBoard, setShowGroupBoard,
     showIntegrationQuickPanel, toggleIntegrationQuickPanel,
     showAIQuickPanel, toggleAIQuickPanel,
-    openQuickChat, quickChatOpen, theme, fontSizeScale,
+    openQuickChat, quickChatOpen, theme, uiSkin, fontSizeScale,
     sidebarExpanded
   } = useAppStore(useShallow(s => ({
     view: s.view, setView: s.setView, notification: s.notification, hideNotification: s.hideNotification,
@@ -244,7 +244,7 @@ export default function App() {
     showIntegrationQuickPanel: s.showIntegrationQuickPanel,
     toggleIntegrationQuickPanel: s.toggleIntegrationQuickPanel, showAIQuickPanel: s.showAIQuickPanel,
     toggleAIQuickPanel: s.toggleAIQuickPanel, openQuickChat: s.openQuickChat, quickChatOpen: s.quickChatOpen,
-    theme: s.theme, fontSizeScale: s.fontSizeScale, sidebarExpanded: s.sidebarExpanded,
+    theme: s.theme, uiSkin: s.uiSkin, fontSizeScale: s.fontSizeScale, sidebarExpanded: s.sidebarExpanded,
   })));
   const activePluginPanel = useAppStore(s => s.activePluginPanel);
   const setActivePluginPanel = useAppStore(s => s.setActivePluginPanel);
@@ -284,8 +284,8 @@ export default function App() {
 
   // ─── Resizable sidebar width ────────────────────────────────────────────
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
-    try { return Number(localStorage.getItem('deplao:sidebar-width') || '0') || 288; }
-    catch { return 288; }
+    try { return Number(localStorage.getItem('deplao:sidebar-width') || '0') || 344; }
+    catch { return 344; }
   });
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const sidebarResizingRef = useRef(false);
@@ -391,10 +391,14 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // ─── Sync theme to <html> element ────────────────────────────────────────
+  // ─── Sync theme & UI skin to <html> element ──────────────────────────────
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.uiSkin = uiSkin;
+  }, [uiSkin]);
 
   // ─── Sync font size scale to <html> element ──────────────────────────────
   useEffect(() => {

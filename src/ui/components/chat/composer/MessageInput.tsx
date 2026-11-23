@@ -3325,7 +3325,7 @@ export default function MessageInput() {
       )}
 
       {/* ── Toolbar row ── */}
-      <div className="flex items-center gap-1 px-2 pt-2 pb-1 border-b border-border/50">
+      <div className="flex items-center gap-1 px-3 py-1.5">
         {/* Emoji / Expressions */}
         {/* Sticker (hidden in employee mode without permission). Personal Telegram: the Emoji · Sticker · GIF panel syncs with the account;
             Telegram bots have no account sticker-set API → hidden */}
@@ -3803,7 +3803,7 @@ export default function MessageInput() {
       )}
 
       {/* ── Input row ── */}
-      <div className="relative flex items-end gap-2 px-3 py-2">
+      <div className="relative flex items-end gap-2 px-3.5 py-2.5 border-t border-border/60 focus-within:border-primary transition-colors">
         {/* Bot Menu button, before the message input */}
         {isTelegramUser(activeContact?.channel) && activeContact?.is_cov_bot === 1 && (() => {
           const hasMainApp = activeContact?.has_main_app === 1;
@@ -3934,7 +3934,7 @@ export default function MessageInput() {
           {/* Placeholder */}
           {!text && (
             <span
-              className="absolute inset-0 text-muted-foreground text-sm pointer-events-none select-none flex items-center px-0"
+              className="absolute inset-0 text-subtle-foreground text-[15px] leading-[1.5] pointer-events-none select-none flex items-center px-0"
               style={{ top: 0 }}
             >
               {composerTarget?.placeholder || (account ? tr('Nhập @tên để tag, Shift+Enter xuống dòng, Enter gửi...') : tr('Nhập tin nhắn...'))}
@@ -3959,7 +3959,7 @@ export default function MessageInput() {
                 prevTextRef.current = '';
               }
             }}
-            className="w-full bg-transparent text-foreground text-sm focus:outline-none overflow-y-auto py-1"
+            className="w-full bg-transparent text-foreground text-[15px] focus:outline-none overflow-y-auto py-1"
             style={{ minHeight: '2rem', maxHeight: '8rem', wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}
             spellCheck={false}
           />
@@ -4004,7 +4004,7 @@ export default function MessageInput() {
           <button
             onClick={handleSend}
             disabled={sending}
-            className={`flex-shrink-0 w-9 h-9 rounded-lg disabled:opacity-50 flex items-center justify-center text-white transition-colors ${isUrlOnly(text.trim()) && clipboardImages.length === 0 ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+            className={`flex-shrink-0 w-9 h-9 rounded-[6px] disabled:opacity-50 flex items-center justify-center transition-colors ${isUrlOnly(text.trim()) && clipboardImages.length === 0 ? 'bg-success text-white hover:opacity-90' : 'bg-primary hover:bg-primary-hover text-primary-foreground'}`}
             title={isUrlOnly(text.trim()) && clipboardImages.length === 0 ? tr('Gửi link (Enter)') : tr('Gửi (Enter)')}
           >
             {isUrlOnly(text.trim()) && clipboardImages.length === 0 ? (
@@ -4022,7 +4022,7 @@ export default function MessageInput() {
           <button
             onClick={handleSendLike}
             disabled={sending}
-            className="flex-shrink-0 w-9 h-9 rounded-lg hover:bg-muted flex items-center justify-center text-blue-400 hover:text-blue-300 transition-colors text-xl"
+            className="flex-shrink-0 w-9 h-9 rounded-[6px] hover:bg-muted flex items-center justify-center text-primary transition-colors text-xl"
             title={tr('Gửi 👍')}
           >
             👍
@@ -4188,8 +4188,8 @@ const ToolbarBtn = React.forwardRef<HTMLButtonElement, {
       disabled={disabled}
       title={title}
       onContextMenu={onContextMenu}
-      className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed
-        ${active ? 'bg-blue-600 text-white' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+      className={`w-9 h-9 rounded-[6px] flex items-center justify-center transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+        ${active ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
     >
       {children}
     </button>

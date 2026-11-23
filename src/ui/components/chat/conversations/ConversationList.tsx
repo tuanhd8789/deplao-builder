@@ -2555,9 +2555,9 @@ export default function ConversationList() {
   return (
     <div className={`flex flex-col h-full bg-card relative w-full`}>
       {/* Search row - Zalo style */}
-      <div className="px-2 pt-2 pb-1 border-b border-border flex items-center gap-1.5">
+      <div className="px-3 py-2.5 border-b border-border flex items-center gap-1.5">
         {/* Search input wrapper */}
-        <div className={`flex items-center gap-2 bg-muted/60 border rounded-full px-3 py-1.5 transition-all flex-1 min-w-0 ${searchPanelOpen ? 'border-blue-500 bg-muted' : 'border-input hover:border-border-strong'}`}>
+        <div className={`flex items-center gap-2 bg-muted border rounded-[6px] px-2.5 h-8 transition-all flex-1 min-w-0 ${searchPanelOpen ? 'border-primary bg-card' : 'border-transparent hover:border-border focus-within:border-primary focus-within:bg-card'}`}>
           {/* Magnifier that is also the Zalo hidden conversation mark (ZL-03): red = there are hidden conversations (click = read them again from Zalo); viewing → click to hide again */}
           <ZaloHiddenMark accountIds={mergedInboxMode ? mergedInboxAccounts : [activeAccountId]} onFocusSearch={() => searchInputRef.current?.focus()} />
           <input
@@ -2567,7 +2567,7 @@ export default function ConversationList() {
             onChange={e => handleSearchChange(e.target.value)}
             onKeyDown={e => { if (e.key === 'Escape') { setSearchPanelOpen(false); setSearch(''); searchInputRef.current?.blur(); } }}
             placeholder={tr('Tìm kiếm...')}
-            className="flex-1 bg-transparent text-sm text-foreground placeholder-subtle-foreground focus:outline-none min-w-0"
+            className="flex-1 bg-transparent text-[13.5px] text-foreground placeholder-subtle-foreground focus:outline-none min-w-0"
           />
           {search && (
             <button
@@ -3186,25 +3186,25 @@ export default function ConversationList() {
           const latestTime = Number(myDocsSummary.latest?.last_message_time) || 0;
           return (
             <div
-              className={`group/conv relative w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted transition-colors cursor-pointer max-h-[80px] min-h-[80px] ${myDocsActiveEntry ? 'bg-selected hover:bg-selected' : ''}`}
+              className={`group/conv relative w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-row-hover transition-colors cursor-pointer min-h-[72px] ${myDocsActiveEntry ? 'bg-selected hover:bg-selected' : ''}`}
               onClick={() => { setMyDocsPanelOpen(true); setFilterDropdownOpen(false); }}>
               <div className="relative flex-shrink-0"><MyDocumentsIcon /></div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-1">
-                  <span className={`text-sm text-foreground truncate flex items-center gap-1 ${myDocsSummary.unread > 0 ? 'font-semibold' : 'font-medium'}`}>
+                  <span className={`text-[15px] leading-[22px] text-foreground truncate flex items-center gap-1 ${myDocsSummary.unread > 0 ? 'font-semibold' : 'font-medium'}`}>
                     <span title={tr('My Documents luôn ở đầu (như Zalo)')}><PinIcon className="w-4 h-4" /></span>
                     <span className="truncate">{MY_DOCUMENTS_NAME}</span>
                   </span>
-                  {latestTime > 0 && <span className="flex-shrink-0 text-xs text-muted-foreground whitespace-nowrap">{formatTime(latestTime)}</span>}
+                  {latestTime > 0 && <span className="flex-shrink-0 text-[12px] text-subtle-foreground tabular-nums whitespace-nowrap">{formatTime(latestTime)}</span>}
                 </div>
                 <div className="flex items-center justify-between gap-1 mt-1">
-                  <span className="text-sm text-muted-foreground truncate">
+                  <span className={`text-[13.5px] leading-[19px] truncate ${myDocsSummary.unread > 0 ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                     {latestEntry
                       ? <><span className="text-foreground/80">{latestEntry.account.full_name || latestEntry.account.zalo_id}: </span>{formatLastMessage(myDocsSummary.latest?.last_message)}</>
                       : tr('{{count}} tài khoản', { count: myDocsEntries.length })}
                   </span>
                   {myDocsSummary.unread > 0 && (
-                    <span className="flex-shrink-0 bg-primary text-primary-foreground text-[10px] font-medium leading-none tabular-nums rounded-full h-[18px] min-w-[18px] px-1.5 inline-flex items-center justify-center">
+                    <span className="flex-shrink-0 bg-unread-badge text-white-important text-[11px] font-semibold leading-none tabular-nums rounded-full h-[18px] min-w-[18px] px-1.5 inline-flex items-center justify-center">
                       {myDocsSummary.unread > 99 ? '99+' : myDocsSummary.unread}
                     </span>
                   )}
@@ -3272,7 +3272,7 @@ export default function ConversationList() {
               </div>
             )}
             <div
-              className={`group/conv relative w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted transition-colors cursor-pointer ${threadLocalLabelsArr.length > 0 ? 'min-h-[72px]' : 'max-h-[80px] min-h-[80px]'} ${activeThreadId === contact.contact_id && activeAccountId === contact.owner_zalo_id ? 'bg-selected hover:bg-selected' : ''}`}
+              className={`group/conv relative w-full flex items-center gap-3 px-3.5 py-2.5 hover:bg-row-hover transition-colors cursor-pointer min-h-[72px] ${activeThreadId === contact.contact_id && activeAccountId === contact.owner_zalo_id ? 'bg-selected hover:bg-selected' : ''}`}
               onClick={() => { if (mergedInboxMode) { handleMergedClick(contact); } else { handleSelect(contact.contact_id, threadType, contact.owner_zalo_id || activeAccountId); setFilterDropdownOpen(false); } }}>
               <div className="relative flex-shrink-0">
                 {isMyDocs && showsMyDocumentsIcon(contactAccount, contact.avatar_url, failedAvatars.has(contact.contact_id)) ? (
@@ -3286,7 +3286,7 @@ export default function ConversationList() {
                     observer={groupAvatarObserver}
                   />
                 ) : contact.avatar_url && !failedAvatars.has(contact.contact_id) ? (
-                  <img src={toLocalMediaUrl(contact.avatar_url)} alt="" loading="lazy" decoding="async" className="w-10 h-10 rounded-full object-cover"
+                  <img src={toLocalMediaUrl(contact.avatar_url)} alt="" loading="lazy" decoding="async" className="w-12 h-12 rounded-full object-cover"
                     onError={() => {
                       setFailedAvatars(prev => new Set(prev).add(contact.contact_id));
                       // Retry the avatar for both Zalo + Facebook
@@ -3303,7 +3303,7 @@ export default function ConversationList() {
                       }
                     }} />
                 ) : (
-                  <PeerInitials id={contact.contact_id} name={contact.alias || contact.display_name} className="w-10 h-10 text-sm" />
+                  <PeerInitials id={contact.contact_id} name={contact.alias || contact.display_name} className="w-12 h-12 text-base" />
                 )}
                 {/* Zalo friends who are online (merged inbox: top-right corner; the bottom corner is the account badge); temporarily off: see ZALO_FRIEND_ONLINES_ENABLED */}
                 {ZALO_FRIEND_ONLINES_ENABLED && threadType === 0 && !isMyDocs && isZalo(contact.channel || contactAccount?.channel) && (
@@ -3328,7 +3328,7 @@ export default function ConversationList() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-sm font-medium text-foreground truncate flex items-center gap-1">
+                  <span className={`text-[15px] leading-[22px] text-foreground truncate flex items-center gap-1 ${contact.unread_count > 0 ? 'font-semibold' : 'font-medium'}`}>
                     {isMyDocs && <span title={tr('My Documents luôn ở đầu (như Zalo)')}><PinIcon className="w-4 h-4" /></span>}
                     {!isMyDocs && isLocalPinned && <span title={tr('Ghim trong app')}>📍</span>}
                     {!isMyDocs && isPinned && <span title={tr('Ghim Zalo')}><PinIcon className="w-4 h-4" /></span>}
@@ -3353,12 +3353,12 @@ export default function ConversationList() {
                       </svg>
                     </button>
                     {contact.last_message_time ? (
-                      <span className="text-xs text-muted-foreground whitespace-nowrap group-hover/conv:hidden">{formatTime(contact.last_message_time)}</span>
+                      <span className="text-[12px] text-subtle-foreground tabular-nums whitespace-nowrap group-hover/conv:hidden">{formatTime(contact.last_message_time)}</span>
                     ) : null}
                   </div>
                 </div>
-                <div className="flex items-center justify-between gap-1 mt-1">
-                  <span className="text-sm text-muted-foreground truncate flex items-center gap-1">
+                <div className="flex items-center justify-between gap-1 mt-0.5">
+                  <span className={`text-[13.5px] leading-[19px] truncate flex items-center gap-1 ${contact.unread_count > 0 ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                     {/* Zalo label icon before lastMessage */}
                     {contactLabels.length > 0 && (
                       <span
@@ -3406,7 +3406,7 @@ export default function ConversationList() {
                     )}
                     {/* A left group's unread count is frozen from when the account was in it. */}
                     {!membershipNotice && contact.unread_count > 0
-                      ? <span className="bg-primary text-primary-foreground text-[10px] font-medium leading-none tabular-nums rounded-full h-[18px] min-w-[18px] px-1.5 inline-flex items-center justify-center">{contact.unread_count > 99 ? '99+' : contact.unread_count}</span>
+                      ? <span className="bg-unread-badge text-white-important text-[11px] font-semibold leading-none tabular-nums rounded-full h-[18px] min-w-[18px] px-1.5 inline-flex items-center justify-center">{contact.unread_count > 99 ? '99+' : contact.unread_count}</span>
                       : contact.is_replied === 1
                         ? (
                           /* Double-checkmark icon for "đã trả lời" (replied) */
@@ -3607,9 +3607,9 @@ export default function ConversationList() {
 
 function TabBtn({ label, active, onClick, badge, fullWidth }: { label: string; active: boolean; onClick: () => void; badge?: number; fullWidth?: boolean }) {
   return (
-    <button onClick={onClick} className={`${fullWidth ? 'w-full' : 'flex-1'} h-10 flex items-center justify-center text-xs font-medium transition-colors whitespace-nowrap px-3 ${active ? 'text-blue-400 border-b-2 border-blue-400' : 'text-muted-foreground hover:text-foreground/80'}`}>
+    <button onClick={onClick} className={`${fullWidth ? 'w-full' : 'flex-1'} h-10 flex items-center justify-center text-[13.5px] font-semibold transition-colors whitespace-nowrap px-3 ${active ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'}`}>
       {label}
-      {badge !== undefined && badge > 0 && <span className="ml-1 bg-blue-600 text-white text-[9px] rounded-full px-1.5 min-w-[16px] text-center">{badge > 99 ? '99+' : badge}</span>}
+      {badge !== undefined && badge > 0 && <span className="ml-1.5 bg-unread-badge text-white-important text-[11px] font-semibold leading-none tabular-nums rounded-full h-[18px] min-w-[18px] px-1.5 inline-flex items-center justify-center">{badge > 99 ? '99+' : badge}</span>}
     </button>
   );
 }
@@ -3627,8 +3627,8 @@ function CtxItem({ icon, label, onClick, hasArrow, danger }: { icon: React.React
 /** My Documents image when Zalo has no folder image (Telegram always uses it): a cloud on a blue background. */
 function MyDocumentsIcon() {
   return (
-    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-gradient-to-br from-sky-400 to-blue-600" style={{ color: '#fff' }} title={MY_DOCUMENTS_NAME}>
-      <CloudIcon className="w-5 h-5" />
+    <div className="w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br from-sky-400 to-blue-600" style={{ color: '#fff' }} title={MY_DOCUMENTS_NAME}>
+      <CloudIcon className="w-6 h-6" />
     </div>
   );
 }

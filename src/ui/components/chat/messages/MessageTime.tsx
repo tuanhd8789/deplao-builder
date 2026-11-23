@@ -152,7 +152,7 @@ export function BubbleTime({ timestamp, className = '' }: { timestamp?: number |
   const t = formatBubbleTime(timestamp);
   if (!t || elsewhere) return null;
   return (
-    <div className={`mt-1 flex items-center gap-0.5 text-[11px] leading-none text-subtle-foreground select-none cursor-default ${className}`}
+    <div className={`mt-1 flex items-center gap-0.5 text-[11px] leading-none tabular-nums text-subtle-foreground select-none cursor-default ${className}`}
       title={formatFullDateTime(timestamp)}>
       <TtlMark ttl={ttl} sentAt={timestamp} />
       {t}
@@ -177,7 +177,7 @@ export function TextWithInlineTime({ timestamp, children, className = '' }: {
       {children}
       {t && <span aria-hidden="true" className={`inline-block ${inlineTimeSpacerClass(!!status, ttl)} select-none`} />}
       {t && (
-        <span className="absolute -bottom-0.5 right-0 inline-flex items-center gap-0.5 text-[11px] leading-none text-subtle-foreground select-none cursor-default"
+        <span className="absolute -bottom-0.5 right-0 inline-flex items-center gap-0.5 text-[11px] leading-none tabular-nums text-subtle-foreground select-none cursor-default"
           title={formatFullDateTime(timestamp)}>
           <TtlMark ttl={ttl} sentAt={timestamp} />
           {t}

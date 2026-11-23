@@ -3,55 +3,57 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   DESIGN TOKENS (palette v3 — derived from a Zalo-like model, every value shifted
-   a few percent; no vendor colour is used verbatim).
+   DESIGN TOKENS — Authentic Zalo PC Skin (default) + Classic Deplao override.
    Values are RGB channels so Tailwind alpha modifiers work (bg-card/50).
    Dark values live on :root + html[data-theme="dark"], light values on
-   html[data-theme="light"]. Components use the Tailwind colour names
-   (bg-card, text-muted-foreground, border-border, bg-primary …) declared in
-   tailwind.config.js. Never hard-code gray-* / hex colours in components.
+   html[data-theme="light"]. Switching to "Deplao Cổ điển" applies
+   html[data-ui-skin="classic"] overrides without touching any component class.
    Contract + usage: src/ui/components/ui/README.md
    ═══════════════════════════════════════════════════════════════════════════ */
 :root,
 html[data-theme="dark"] {
   color-scheme: dark;
 
-  /* surfaces */
-  --background: 19 21 24;          /* #131518 app shell / chat area */
-  --card: 28 31 37;                /* #1c1f25 panels, list rows */
-  --popover: 35 39 45;             /* #23272d menus, dialogs */
-  --muted: 41 46 53;               /* #292e35 inputs, subtle fills, row hover */
-  --accent: 55 63 73;              /* #373f49 stronger fill, active row */
+  /* surfaces (Zalo PC Dark) */
+  --background: 21 24 28;          /* #15181C app shell / chat area */
+  --card: 29 33 39;                /* #1D2127 panels, list rows */
+  --popover: 36 41 48;             /* #242930 menus, dialogs */
+  --muted: 40 46 54;               /* #282E36 inputs, subtle fills */
+  --accent: 52 59 69;              /* #343B45 stronger fill */
+  --row-hover: 36 41 49;           /* #242931 conversation row hover */
 
   /* lines */
-  --border: 43 49 57;              /* #2b3139 */
-  --input: 55 63 73;               /* #373f49 input border */
-  --border-strong: 70 80 92;       /* #46505c */
+  --border: 44 51 60;              /* #2C333C */
+  --input: 55 64 76;               /* #37404C input border */
+  --border-strong: 72 84 99;       /* #485463 */
 
   /* text */
-  --foreground: 221 226 233;       /* #dde2e9 */
-  --muted-foreground: 158 169 185; /* #9ea9b9 */
-  --subtle-foreground: 116 129 149;/* #748195 placeholder, timestamps */
+  --foreground: 230 235 242;       /* #E6EBF2 */
+  --muted-foreground: 152 165 182; /* #98A5B6 */
+  --subtle-foreground: 112 126 146;/* #707E92 placeholders, timestamps */
 
   /* brand + status */
-  --primary: 47 123 255;           /* #2f7bff */
-  --primary-hover: 74 141 255;     /* #4a8dff */
+  --primary: 26 120 255;           /* #1A78FF */
+  --primary-hover: 56 138 255;     /* #388AFF */
   --primary-foreground: 255 255 255;
-  --destructive: 232 81 77;        /* #e8514d */
+  --destructive: 235 87 87;        /* #EB5757 */
   --destructive-foreground: 255 255 255;
-  --success: 77 191 122;           /* #4dbf7a */
-  --warning: 247 198 49;           /* #f7c631 */
-  --info: 112 170 255;             /* #70aaff links on dark */
-  --ring: 47 123 255;
+  --unread-badge: 224 49 49;       /* #E03131 */
+  --success: 39 194 114;           /* #27C272 */
+  --warning: 245 166 35;           /* #F5A623 */
+  --info: 90 162 255;              /* #5AA2FF */
+  --ring: 26 120 255;
 
   /* chat */
-  --bubble-in: 43 49 57;           /* #2b3139 incoming message */
-  --bubble-in-border: 55 63 73;    /* #373f49 */
-  --bubble-out: 27 62 112;         /* #1b3e70 outgoing message (navy) */
-  --bubble-out-border: 42 79 138;  /* #2a4f8a */
-  --selected: 29 44 71;            /* #1d2c47 active conversation row */
+  --bubble-in: 37 42 50;           /* #252A32 incoming message */
+  --bubble-in-border: 50 57 68;    /* #323944 */
+  --bubble-out: 28 57 96;          /* #1C3960 outgoing message (deep navy) */
+  --bubble-out-border: 41 78 128;  /* #294E80 */
+  --bubble-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --chat-time-out: 156 184 218;    /* #9CB8DA timestamp inside dark outgoing bubble */
+  --selected: 25 46 76;            /* #192E4C active conversation row */
 
-  /* Peer colours, mọi kênh (tên / trích dẫn / ảnh đại diện chữ theo người, như Telegram Desktop tối): đỏ, cam,
+  /* Peer colours, mọi kênh (tên / trích dẫn / ảnh đại diện chữ theo người): đỏ, cam,
      tím, xanh lá, xanh ngọc, xanh dương, hồng — xem lib/chat/peerStyle.ts */
   --chat-peer-0: 245 135 128;      /* #f58780 */
   --chat-peer-1: 236 176 92;       /* #ecb05c */
@@ -63,11 +65,12 @@ html[data-theme="dark"] {
   --chat-rank: 72 160 84;          /* #48a054 chức vụ (quản trị viên) */
 
   /* app frame (rail) */
-  --sidebar: 22 24 27;             /* #16181b */
-  --sidebar-hover: 35 39 45;       /* #23272d */
-  --sidebar-active: 47 123 255;    /* selected tile = primary */
-  --sidebar-foreground: 221 226 233;
+  --sidebar: 20 24 29;             /* #14181D */
+  --sidebar-hover: 34 40 48;       /* #222830 */
+  --sidebar-active: 0 104 255;     /* #0068FF */
+  --sidebar-foreground: 218 225 234;/* #DAE1EA */
   --sidebar-active-foreground: 255 255 255;
+  --sidebar-ring: 26 120 255;
   --color-sidebar: rgb(var(--sidebar));
   --color-sidebar-hover: rgb(var(--sidebar-hover));
 }
@@ -75,56 +78,135 @@ html[data-theme="dark"] {
 html[data-theme="light"] {
   color-scheme: light;
 
-  /* surfaces */
-  --background: 236 238 243;       /* #eceef3 page / chat area */
-  --card: 255 255 255;             /* panels, list rows */
+  /* surfaces (Zalo PC Light) */
+  --background: 235 236 240;       /* #EBECF0 authentic Zalo PC chat canvas */
+  --card: 255 255 255;             /* #FFFFFF panels, headers, list rows, composer */
   --popover: 255 255 255;
-  --muted: 242 243 246;            /* #f2f3f6 inputs, subtle fills, row hover */
-  --accent: 227 230 236;           /* #e3e6ec stronger fill */
+  --muted: 234 237 240;            /* #EAEDF0 search bar, pills, subtle fills */
+  --accent: 223 226 231;           /* #DFE2E7 stronger hover/active fill */
+  --row-hover: 243 245 246;        /* #F3F5F6 authentic Zalo PC conversation hover */
 
-  --border: 221 225 231;           /* #dde1e7 */
-  --input: 201 205 214;            /* #c9cdd6 */
-  --border-strong: 178 184 196;    /* #b2b8c4 */
+  /* lines */
+  --border: 214 219 225;           /* #D6DBE1 */
+  --input: 198 205 212;            /* #C6CDD4 */
+  --border-strong: 174 184 196;    /* #AEB8C4 */
 
-  --foreground: 15 31 61;          /* #0f1f3d */
-  --muted-foreground: 92 107 132;  /* #5c6b84 */
-  --subtle-foreground: 122 136 158;/* #7a889e */
+  /* text (Zalo PC deep ink-navy) */
+  --foreground: 8 28 54;           /* #081C36 authentic Zalo primary text */
+  --muted-foreground: 117 137 163; /* #7589A3 message preview, secondary */
+  --subtle-foreground: 142 160 181;/* #8EA0B5 timestamps, placeholders */
 
-  --primary: 31 107 242;           /* #1f6bf2 */
-  --primary-hover: 21 87 214;      /* #1557d6 */
+  /* brand + status (Zalo Blue & Red) */
+  --primary: 0 104 255;            /* #0068FF */
+  --primary-hover: 0 90 224;       /* #005AE0 */
   --primary-foreground: 255 255 255;
-  --destructive: 201 34 34;        /* #c92222 */
+  --destructive: 217 27 27;        /* #D91B1B */
   --destructive-foreground: 255 255 255;
-  --success: 53 173 102;           /* #35ad66 */
-  --warning: 217 168 15;           /* #d9a80f */
-  --info: 31 99 217;               /* #1f63d9 */
-  --ring: 31 107 242;
+  --unread-badge: 200 26 31;       /* #C81A1F signature Zalo unread badge */
+  --success: 21 168 95;            /* #15A85F */
+  --warning: 242 120 6;            /* #F27806 */
+  --info: 0 104 255;               /* #0068FF */
+  --ring: 0 104 255;
 
   /* chat */
-  --bubble-in: 255 255 255;        /* incoming message = white */
-  --bubble-in-border: 227 230 235; /* #e3e6eb */
-  --bubble-out: 228 239 253;       /* #e4effd outgoing message */
-  --bubble-out-border: 197 220 250;/* #c5dcfa */
-  --selected: 228 239 253;         /* #e4effd active conversation row */
+  --bubble-in: 255 255 255;        /* #FFFFFF incoming message */
+  --bubble-in-border: 229 232 237; /* #E5E8ED */
+  --bubble-out: 219 235 255;       /* #DBEBFF authentic Zalo outgoing bubble */
+  --bubble-out-border: 199 224 255;/* #C7E0FF */
+  --bubble-shadow: 0 1px 2px rgba(8, 28, 54, 0.08);
+  --chat-time-out: 71 98 133;      /* #476285 timestamp inside Zalo light outgoing bubble */
+  --selected: 229 239 255;         /* #E5EFFF active conversation row */
 
-  /* Peer colours — giao diện sáng (đậm hơn để đọc được trên nền trắng) */
+  /* Peer colours — giao diện sáng */
   --chat-peer-0: 204 80 73;        /* #cc5049 */
   --chat-peer-1: 214 119 34;       /* #d67722 */
   --chat-peer-2: 149 92 219;       /* #955cdb */
   --chat-peer-3: 64 169 32;        /* #40a920 */
   --chat-peer-4: 48 158 186;       /* #309eba */
-  --chat-peer-5: 54 138 209;       /* #368ad1 */
+  --chat-peer-5: 0 104 255;        /* #0068ff */
   --chat-peer-6: 199 80 139;       /* #c7508b */
-  --chat-rank: 46 140 64;          /* #2e8c40 */
+  --chat-rank: 21 168 95;          /* #15a85f */
 
-  /* app frame (rail): pale blue-grey, solid blue selected tile */
-  --sidebar: 238 242 249;          /* #eef2f9 */
-  --sidebar-hover: 226 232 243;    /* #e2e8f3 */
-  --sidebar-active: 31 107 242;    /* = primary */
-  --sidebar-foreground: 15 31 61;  /* dark icons at rest (use /70) */
+  /* app frame (rail): signature bright Zalo PC left blue bar */
+  --sidebar: 0 145 255;            /* #0091FF */
+  --sidebar-hover: 0 125 224;      /* #007DE0 */
+  --sidebar-active: 0 106 214;     /* #006AD6 */
+  --sidebar-foreground: 255 255 255;
   --sidebar-active-foreground: 255 255 255;
+  --sidebar-ring: 255 255 255;
   --color-sidebar: rgb(var(--sidebar));
   --color-sidebar-hover: rgb(var(--sidebar-hover));
+}
+
+/* ── Classic Deplao skin fallback (user selectable in Settings → Giao diện) ── */
+html[data-ui-skin="classic"] {
+  --background: 19 21 24;
+  --card: 28 31 37;
+  --popover: 35 39 45;
+  --muted: 41 46 53;
+  --accent: 55 63 73;
+  --row-hover: 41 46 53;
+  --border: 43 49 57;
+  --input: 55 63 73;
+  --border-strong: 70 80 92;
+  --foreground: 221 226 233;
+  --muted-foreground: 158 169 185;
+  --subtle-foreground: 116 129 149;
+  --primary: 47 123 255;
+  --primary-hover: 74 141 255;
+  --unread-badge: 239 68 68;
+  --destructive: 232 81 77;
+  --success: 77 191 122;
+  --warning: 247 198 49;
+  --info: 112 170 255;
+  --ring: 47 123 255;
+  --bubble-in: 43 49 57;
+  --bubble-in-border: 55 63 73;
+  --bubble-out: 27 62 112;
+  --bubble-out-border: 42 79 138;
+  --bubble-shadow: none;
+  --chat-time-out: 116 129 149;
+  --selected: 29 44 71;
+  --sidebar: 22 24 27;
+  --sidebar-hover: 35 39 45;
+  --sidebar-active: 47 123 255;
+  --sidebar-foreground: 221 226 233;
+  --sidebar-ring: 47 123 255;
+}
+
+html[data-theme="light"][data-ui-skin="classic"] {
+  --background: 236 238 243;
+  --card: 255 255 255;
+  --popover: 255 255 255;
+  --muted: 242 243 246;
+  --accent: 227 230 236;
+  --row-hover: 242 243 246;
+  --border: 221 225 231;
+  --input: 201 205 214;
+  --border-strong: 178 184 196;
+  --foreground: 15 31 61;
+  --muted-foreground: 92 107 132;
+  --subtle-foreground: 122 136 158;
+  --primary: 31 107 242;
+  --primary-hover: 21 87 214;
+  --unread-badge: 239 68 68;
+  --destructive: 201 34 34;
+  --success: 53 173 102;
+  --warning: 217 168 15;
+  --info: 31 99 217;
+  --ring: 31 107 242;
+  --bubble-in: 255 255 255;
+  --bubble-in-border: 227 230 235;
+  --bubble-out: 228 239 253;
+  --bubble-out-border: 197 220 250;
+  --bubble-shadow: none;
+  --chat-time-out: 122 136 158;
+  --selected: 228 239 253;
+  --sidebar: 238 242 249;
+  --sidebar-hover: 226 232 243;
+  --sidebar-active: 31 107 242;
+  --sidebar-foreground: 15 31 61;
+  --sidebar-ring: 31 107 242;
 }
 
 @layer base {
@@ -134,12 +216,18 @@ html[data-theme="light"] {
   body {
     margin: 0;
     padding: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Segoe UI', 'SegoeuiPc', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    line-height: 1.45;
     background-color: rgb(var(--background));
     color: rgb(var(--foreground));
     overflow: hidden;
     -webkit-user-select: text;
     user-select: text;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background-color: rgb(var(--primary) / 0.22);
   }
   ::-webkit-scrollbar {
     width: 0.375rem;
@@ -158,14 +246,17 @@ html[data-theme="light"] {
 }
 
 @layer components {
+  .chat-bubble-shadow {
+    box-shadow: var(--bubble-shadow);
+  }
   .btn-primary {
-    @apply bg-primary hover:bg-primary-hover text-primary-foreground px-4 py-2 rounded-lg font-medium transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-primary hover:bg-primary-hover text-primary-foreground px-4 py-2 rounded-[6px] font-medium transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
   }
   .btn-secondary {
-    @apply bg-muted hover:bg-accent text-foreground px-4 py-2 rounded-lg font-medium transition-colors duration-150;
+    @apply bg-muted hover:bg-accent text-foreground px-4 py-2 rounded-[6px] font-medium transition-colors duration-150;
   }
   .input-field {
-    @apply w-full bg-muted border border-input rounded-lg px-3 py-2 text-foreground placeholder-subtle-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring;
+    @apply w-full bg-muted border border-input rounded-[6px] px-3 py-2 text-foreground placeholder-subtle-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-ring;
   }
 
   .task-editor-select {
@@ -450,6 +541,8 @@ html[data-theme="light"] input[type="datetime-local"] {
    với nền navy — #9ecbff: 7.8 trên bong bóng nhận, 6.3 trên bong bóng gửi. Giao diện sáng giữ text-blue-400 như cũ. */
 html:not([data-theme="light"]) .chat-link { color: #9ecbff; text-decoration-line: none; }
 html:not([data-theme="light"]) .chat-link:hover { color: #c6e2ff; text-decoration-line: underline; }
+html[data-theme="light"] .chat-link { color: rgb(var(--primary)); text-decoration-line: none; }
+html[data-theme="light"] .chat-link:hover { color: rgb(var(--primary-hover)); text-decoration-line: underline; }
 
 /* "Chuyển tiếp từ …" (TelegramForwardHeader) như Telegram: chữ "Chuyển tiếp từ" màu chữ phụ, tên nguồn đậm theo màu của
    nguồn (chat-peer-N, như tên người gửi / trích dẫn). Trước đây cả dòng màu nhấn xanh, chữ mờ 80%: 3.4 (chữ ~2.8) trên
@@ -462,7 +555,8 @@ html:not([data-theme="light"]) [data-out] .chat-forward-name { color: color-mix(
 
 /* @nhắc tên trong tin (TextWithMentions): xanh như cũ; tin mình gửi ở giao diện tối (hàng [data-out] của ChatWindow,
    bong bóng xanh đậm: xanh cũ chìm) dùng xanh sáng như link */
-.chat-mention { color: #5398f3; }
+.chat-mention { color: rgb(var(--primary)); }
+html:not([data-theme="light"]) .chat-mention { color: #5398f3; }
 html:not([data-theme="light"]) [data-out] .chat-mention { color: #9ecbff; }
 
 /* Dấu ✓✓ "đã xem" cạnh giờ tin gửi (MessageTime StatusTicks); ✓ / ✓✓ khác giữ màu chữ của giờ */
@@ -497,10 +591,10 @@ html[data-theme="light"] .border-red-400\/40 { border-color: rgba(248,113,113,0.
 html[data-theme="light"] .border-blue-500\/40 { border-color: rgba(59,130,246,0.32); }
 html[data-theme="light"] .border-yellow-500\/30 { border-color: rgba(161,98,7,0.3); }
 html[data-theme="light"] .border-yellow-500\/20 { border-color: rgba(161,98,7,0.2); }
-html[data-theme="light"] .text-blue-400  { color: #2563eb; }
-html[data-theme="light"] .text-blue-300  { color: #3b82f6; }
-html[data-theme="light"] .hover\:text-blue-300:hover { color: #1d4ed8; }
-html[data-theme="light"] .hover\:text-blue-400:hover { color: #1d4ed8; }
+html[data-theme="light"] .text-blue-400  { color: #0068ff; }
+html[data-theme="light"] .text-blue-300  { color: #0091ff; }
+html[data-theme="light"] .hover\:text-blue-300:hover { color: #005ae0; }
+html[data-theme="light"] .hover\:text-blue-400:hover { color: #005ae0; }
 html[data-theme="light"] .text-green-500 { color: #15803d; }
 html[data-theme="light"] .text-green-400 { color: #15803d; }
 html[data-theme="light"] .text-green-400\/70 { color: #15803d; }

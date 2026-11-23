@@ -47,7 +47,11 @@ module.exports = {
         'sidebar-active': token('sidebar-active'),
         'sidebar-foreground': token('sidebar-foreground'),
         'sidebar-active-foreground': token('sidebar-active-foreground'),
-        // chat bubbles (Zalo: incoming white / outgoing #e5f1ff in light)
+        'sidebar-ring': token('sidebar-ring'),
+        'row-hover': token('row-hover'),
+        'unread-badge': token('unread-badge'),
+        'chat-time-out': token('chat-time-out'),
+        // chat bubbles (Zalo: incoming white / outgoing #dbebff in light)
         'bubble-in': token('bubble-in'),
         'bubble-out': token('bubble-out'),
         'bubble-in-border': token('bubble-in-border'),
@@ -68,7 +72,7 @@ module.exports = {
         DEFAULT: token('ring'),
       },
       fontFamily: {
-        sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        sans: ['Segoe UI', 'SegoeuiPc', '-apple-system', 'BlinkMacSystemFont', 'Roboto', 'Helvetica Neue', 'Helvetica', 'Arial', 'sans-serif'],
       },
     },
   },

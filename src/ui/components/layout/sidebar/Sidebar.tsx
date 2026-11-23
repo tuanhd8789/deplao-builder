@@ -222,13 +222,13 @@ export default function Sidebar({ onAddAccount }: SidebarProps) {
             const isAllMode = mergedInboxFilterAccount === null;
             return (
               <div key={zaloId} className="relative flex-shrink-0">
-                {isSelected && <span className="absolute -left-3 top-0.5 bottom-0.5 w-[3px] rounded-r-full bg-sidebar-active pointer-events-none" />}
+                {isSelected && <span className="absolute -left-3 top-0.5 bottom-0.5 w-[3px] rounded-r-full bg-sidebar-ring pointer-events-none" />}
                 <button
                   onClick={() => setMergedInboxFilter(isSelected ? null : zaloId)}
                   title={`${account.full_name || zaloId}${account.isConnected ? '' : tr(' · Chưa kết nối')}${isSelected ? tr(' - đang lọc') : tr(' - nhấn để lọc')}`}
                   className={`w-10 h-10 rounded-full overflow-hidden ring-2 transition-all flex-shrink-0 ${
                     isSelected
-                      ? 'ring-[3px] ring-sidebar-active scale-110'
+                      ? 'ring-[2.5px] ring-sidebar-ring scale-105'
                       : isAllMode
                         ? 'ring-transparent opacity-90 hover:ring-sidebar-foreground/60'
                         : 'ring-transparent opacity-40 hover:opacity-80 hover:ring-sidebar-foreground/60'
@@ -267,7 +267,7 @@ export default function Sidebar({ onAddAccount }: SidebarProps) {
                   )}
                 </button>
                 {unreadConvCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5 leading-none z-10 shadow-md pointer-events-none">
+                  <span className="absolute -top-1 -right-1 bg-unread-badge text-white-important text-[10px] font-semibold tabular-nums rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none z-10 shadow-sm pointer-events-none">
                     {unreadConvCount > 99 ? '99+' : unreadConvCount}
                   </span>
                 )}
@@ -324,14 +324,14 @@ export default function Sidebar({ onAddAccount }: SidebarProps) {
                   title={tooltipLines}
                   className={`relative w-10 h-10 rounded-full overflow-visible ring-2 transition-all flex-shrink-0 ${
                     activeAccountId === account.zalo_id
-                      ? 'ring-[3px] ring-sidebar-active'
+                      ? 'ring-[2.5px] ring-sidebar-ring'
                       : listenerDead
                         ? 'ring-red-600'
                           : 'ring-transparent hover:ring-sidebar-foreground/60'
                   }`}
                   style={{ cursor: 'pointer' }}
                 >
-                  {activeAccountId === account.zalo_id && <span className="absolute -left-3 top-0.5 bottom-0.5 w-[3px] rounded-r-full bg-sidebar-active pointer-events-none" />}
+                  {activeAccountId === account.zalo_id && <span className="absolute -left-3 top-0.5 bottom-0.5 w-[3px] rounded-r-full bg-sidebar-ring pointer-events-none" />}
                   <div className={`w-10 h-10 rounded-full overflow-hidden transition-[filter,opacity]${account.isConnected ? '' : ' grayscale opacity-60'}`}>
                     {account.avatar_url ? (
                       <img
@@ -371,11 +371,11 @@ export default function Sidebar({ onAddAccount }: SidebarProps) {
 
                   {/* ── Top-right: listener dead / unread badge ── */}
                   {listenerDead ? (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-sidebar flex items-center justify-center z-10">
-                      <span className="text-white text-[8px] font-bold leading-none">!</span>
+                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-unread-badge rounded-full border-2 border-sidebar flex items-center justify-center z-10">
+                      <span className="text-white-important text-[8px] font-bold leading-none">!</span>
                     </span>
                   ) : unreadConvCount > 0 ? (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-0.5 leading-none z-10 shadow-md">
+                    <span className="absolute -top-1 -right-1 bg-unread-badge text-white-important text-[10px] font-semibold tabular-nums rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none z-10 shadow-sm">
                       {unreadConvCount > 99 ? '99+' : unreadConvCount}
                     </span>
                   ) : null}
@@ -463,7 +463,7 @@ export default function Sidebar({ onAddAccount }: SidebarProps) {
 }
 
 /** "mới" (new) red dot at the corner of a rail button - shared by NavBtn and NavFlyout so the dots look identical. */
-const RAIL_DOT_CLASS = 'absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full border border-sidebar pointer-events-none';
+const RAIL_DOT_CLASS = 'absolute top-1 right-1 w-2 h-2 bg-unread-badge rounded-full border border-sidebar pointer-events-none';
 
 function NavBtn({ icon, label, active, onClick, dot }: { icon: string; label: string; active: boolean; onClick: () => void; dot?: boolean }) {
   const icons: Record<string, React.ReactNode> = {
@@ -550,9 +550,9 @@ function NavBtn({ icon, label, active, onClick, dot }: { icon: string; label: st
 
   return (
     <button onClick={onClick} title={label}
-      className={`relative w-11 h-11 rounded-xl flex items-center justify-center transition-colors ${active ? 'bg-sidebar-active text-sidebar-active-foreground shadow-md shadow-sidebar-active/40' : 'text-sidebar-foreground/90 hover:bg-sidebar-hover hover:text-sidebar-foreground'}`}>
+      className={`relative w-11 h-11 rounded-[8px] flex items-center justify-center transition-colors ${active ? 'bg-sidebar-active text-sidebar-active-foreground' : 'text-sidebar-foreground/85 hover:bg-sidebar-hover hover:text-sidebar-foreground'}`}>
       {icons[icon]}
-      {active && <span className="absolute -left-2.5 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-sidebar-active pointer-events-none" />}
+      {active && <span className="absolute -left-2.5 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-sidebar-ring pointer-events-none" />}
       {dot && <span className={RAIL_DOT_CLASS} />}
     </button>
   );
@@ -597,12 +597,12 @@ function NavFlyout({ icon, label, active, items, onGuide }: { icon: string; labe
       <button
         ref={btnRef}
         title={label}
-        className={`relative w-11 h-11 rounded-xl flex items-center justify-center transition-colors ${
-          active ? 'bg-sidebar-active text-sidebar-active-foreground shadow-md shadow-sidebar-active/40' : 'text-sidebar-foreground/90 hover:bg-sidebar-hover hover:text-sidebar-foreground'
+        className={`relative w-11 h-11 rounded-[8px] flex items-center justify-center transition-colors ${
+          active ? 'bg-sidebar-active text-sidebar-active-foreground' : 'text-sidebar-foreground/85 hover:bg-sidebar-hover hover:text-sidebar-foreground'
         }`}
       >
         <NavIcon name={icon} />
-        {active && <span className="absolute -left-2.5 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-sidebar-active pointer-events-none" />}
+        {active && <span className="absolute -left-2.5 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-sidebar-ring pointer-events-none" />}
         {hasDot && <span className={RAIL_DOT_CLASS} />}
       </button>
 

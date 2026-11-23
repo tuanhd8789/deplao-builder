@@ -578,8 +578,8 @@ export default function TopBar() {
       style={{ WebkitAppRegion: 'drag' } as any}
     >
       <div className="flex items-center gap-2 px-3" style={{ WebkitAppRegion: 'no-drag', paddingLeft: isMac ? 72 : 12 } as any}>
-        <span className="text-blue-400 font-bold text-sm">Deplao</span>
-        <span className="text-muted-foreground text-xs">v{APP_VERSION}</span>
+        <span className="text-primary font-bold text-sm tracking-tight">Deplao</span>
+        <span className="text-muted-foreground text-xs tabular-nums">v{APP_VERSION}</span>
         {updateInfo && (updateStatus === 'available' || updateStatus === 'downloading' || updateStatus === 'downloaded') && (
           <button onClick={openUpdatePopup}
             className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold transition-colors ${

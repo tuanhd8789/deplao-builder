@@ -85,12 +85,13 @@ function CompositeGrid({ allMembers, sizeClass }: { allMembers: Member[]; sizeCl
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-export type GroupAvatarSize = 'xs' | 'sm' | 'md' | 'search' | 'lg';
+export type GroupAvatarSize = 'xs' | 'sm' | 'md' | 'zalo' | 'search' | 'lg';
 
 const SIZE_MAP: Record<GroupAvatarSize, { sizeClass: string; fallbackText: string }> = {
   xs:     { sizeClass: 'w-8 h-8',   fallbackText: 'text-xs' },   // CRM list
   sm:     { sizeClass: 'w-9 h-9',   fallbackText: 'text-sm' },   // FriendList
-  md:     { sizeClass: 'w-10 h-10', fallbackText: 'text-base' }, // ConversationList (default)
+  md:     { sizeClass: 'w-10 h-10', fallbackText: 'text-base' }, // Compact list
+  zalo:   { sizeClass: 'w-12 h-12', fallbackText: 'text-base' }, // ConversationList (Zalo PC 48px)
   search: { sizeClass: 'w-11 h-11', fallbackText: 'text-sm' },   // GlobalSearchPanel
   lg:     { sizeClass: 'w-16 h-16', fallbackText: 'text-2xl' },  // GroupInfoPanel
 };

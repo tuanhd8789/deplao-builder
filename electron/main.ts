@@ -347,7 +347,7 @@ function createWindow() {
     frame: isMac,
     titleBarStyle: isMac ? 'hiddenInset' : 'default',
     trafficLightPosition: isMac ? { x: 12, y: 12 } : undefined,
-    backgroundColor: '#131518',
+    backgroundColor: '#15181c',
     icon: cachedNormalIcon && !cachedNormalIcon.isEmpty()
       ? cachedNormalIcon
       : (process.platform === 'win32'
@@ -799,7 +799,7 @@ function registerWindowControls() {
           title: tr('Trình duyệt nội bộ'),
           autoHideMenuBar: true,
           parent: mainWindow ?? undefined,
-          backgroundColor: '#131518',
+          backgroundColor: '#15181c',
           webPreferences: {
             contextIsolation: true,
             sandbox: true,

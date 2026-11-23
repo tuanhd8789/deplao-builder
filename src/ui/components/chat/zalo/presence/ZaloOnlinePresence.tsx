@@ -36,7 +36,7 @@ export function ZaloHeaderPresence({ accountId, userId, className = '' }: {
   if (!text) return null;
   const online = presence?.status === 'online';
   return (
-    <p className={`mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground ${className}`} title={tr('Trạng thái truy cập theo Zalo')}>
+    <p className={`mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground ${className}`} title={tr('Trạng thái truy cập theo Zalo')}>
       <span aria-hidden="true" className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${online ? 'bg-green-500' : 'bg-muted-foreground/50'}`} />
       {text}
     </p>

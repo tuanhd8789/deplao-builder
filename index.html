@@ -7,19 +7,19 @@
     <style>
       /* Pre-paint the window before index.css loads (no white flash). Mirrors --background
          in src/ui/index.css; the data-theme rule keeps it from fighting the light theme. */
-      html { background-color: #131518; }
-      html[data-theme="light"] { background-color: #eceef3; }
+      html { background-color: #15181c; }
+      html[data-theme="light"] { background-color: #ebecf0; }
       /* Boot screen until React's first render replaces #root: a reload (the dev server reconnecting after the laptop
          sleeps, F5) or a cold start on a busy machine used to show an empty dark window that looked frozen. The preload
          applies the saved theme and the translated text as soon as this HTML is parsed. Only transform / opacity are
          animated, so the bar keeps moving on the compositor while the main thread loads the app. */
       #boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-        gap: 12px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color: #e6e8ec; }
-      html[data-theme="light"] #boot { color: #1f2329; }
+        gap: 12px; font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif; color: #e6ebf2; }
+      html[data-theme="light"] #boot { color: #081c36; }
       #boot .boot-name { font-size: 20px; font-weight: 600; }
       #boot .boot-track { width: 160px; height: 3px; border-radius: 3px; overflow: hidden; background: rgba(128, 128, 128, 0.25); }
-      #boot .boot-bar { width: 40%; height: 100%; border-radius: 3px; background: #2f7bff; animation: boot-slide 1.2s ease-in-out infinite; }
-      html[data-theme="light"] #boot .boot-bar { background: #1f6bf2; }
+      #boot .boot-bar { width: 40%; height: 100%; border-radius: 3px; background: #1a78ff; animation: boot-slide 1.2s ease-in-out infinite; }
+      html[data-theme="light"] #boot .boot-bar { background: #0068ff; }
       #boot .boot-text { font-size: 13px; opacity: 0.7; }
       #boot .boot-slow { font-size: 12px; opacity: 0; animation: boot-show 0.4s ease 8s forwards; }
       @keyframes boot-slide { from { transform: translateX(-110%); } to { transform: translateX(260%); } }

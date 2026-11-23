@@ -12,10 +12,10 @@ type SenderAvatarProps = { ctx: MessageRowContext } & Pick<RowLocals, 'msg' | 'i
 export function SenderAvatar({ ctx, msg, isLastInRun, displayName, avatarUrl, senderAvatarFallback }: SenderAvatarProps) {
   const { activeAccountId, avatarRefreshAttempted, failedMsgAvatars, getContact, setFailedMsgAvatars, setUserProfilePopup, updateContact } = ctx;
   return (
-    <div className="w-7 h-7 flex-shrink-0 self-end mb-1">
+    <div className="w-9 h-9 flex-shrink-0 self-end mb-1">
       {isLastInRun ? (
         <button
-          className="w-7 h-7 rounded-full overflow-hidden focus:outline-none hover:ring-2 hover:ring-blue-400 transition-all"
+          className="w-9 h-9 rounded-full overflow-hidden focus:outline-none hover:ring-2 hover:ring-primary transition-all"
           title={tr('Xem thông tin: {{displayName}}', { displayName })}
           onClick={(e) => {
             e.stopPropagation();
@@ -23,7 +23,7 @@ export function SenderAvatar({ ctx, msg, isLastInRun, displayName, avatarUrl, se
           }}
         >
           {avatarUrl && !failedMsgAvatars.has(msg.sender_id) ? (
-            <img src={avatarUrl} alt={displayName} className="w-7 h-7 rounded-full object-cover"
+            <img src={avatarUrl} alt={displayName} className="w-9 h-9 rounded-full object-cover"
               onError={() => {
                 setFailedMsgAvatars(prev => new Set(prev).add(msg.sender_id));
                 if (activeAccountId && !avatarRefreshAttempted.current.has(msg.sender_id)) {
@@ -42,7 +42,7 @@ export function SenderAvatar({ ctx, msg, isLastInRun, displayName, avatarUrl, se
             senderAvatarFallback
           )}
         </button>
-      ) : <div className="w-7 h-7" />}
+      ) : <div className="w-9 h-9" />}
     </div>
   );
 }

@@ -48,8 +48,8 @@ import type { MessageRowContext } from './rowContext';
 function renderDaySeparator(timestamp: number) {
   const label = formatDaySeparator(timestamp);
   return (
-    <div className="flex justify-center w-full my-2" data-day-label={label}>
-      <span className="text-[11px] text-white bg-black/20 dark:bg-white/15 px-2.5 py-0.5 rounded-full">{label}</span>
+    <div className="flex justify-center w-full my-2.5" data-day-label={label}>
+      <span className="text-[12px] font-medium text-white bg-black/25 dark:bg-white/15 px-3 py-1 rounded-full">{label}</span>
     </div>
   );
 }
@@ -132,7 +132,7 @@ export function renderMessageRow(ctx: MessageRowContext, msg: any, idx: number):
         : groupRankLabel(msg.channel, (groupMember as any)?.role))
     : '';
   const senderAvatarFallback = !isSent ? (
-    <PeerInitials id={msg.sender_id} name={displayName} fallback="U" className="w-7 h-7 text-[10px]" />
+    <PeerInitials id={msg.sender_id} name={displayName} fallback="U" className="w-9 h-9 text-xs" />
   ) : null;
 
   const isRecalled = msg.is_recalled === 1 || msg.status === 'recalled' || msg.msg_type === 'recalled';
@@ -329,12 +329,12 @@ export function renderMessageRow(ctx: MessageRowContext, msg: any, idx: number):
                 if ((e.target as HTMLElement).closest(QUICK_REACTION_SKIP)) return;
                 void toggleTelegramQuickReaction(ctx, msg);
               } : undefined}
-              className={`rounded-lg text-sm break-words min-w-0 max-w-full overflow-hidden${inlineTime || timeOnReactionRow ? ' relative' : ''}${hasQuote && !isNoBubbleMsg ? ' min-w-[13rem]' : ''} ${
-              telegramPostMeta ? `${isSent ? 'bg-bubble-out border border-bubble-out-border' : 'bg-bubble-in border border-bubble-in-border'} rounded-lg` :
-              bubbleShell ? (isSent ? 'bg-bubble-out text-foreground border border-bubble-out-border' : 'bg-bubble-in text-foreground border border-bubble-in-border') :
+              className={`rounded-[8px] text-[15px] leading-[1.45] break-words min-w-0 max-w-full overflow-hidden${inlineTime || timeOnReactionRow ? ' relative' : ''}${hasQuote && !isNoBubbleMsg ? ' min-w-[13rem]' : ''} ${
+              telegramPostMeta ? `${isSent ? 'bg-bubble-out border border-bubble-out-border chat-bubble-shadow' : 'bg-bubble-in border border-bubble-in-border chat-bubble-shadow'} rounded-[8px]` :
+              bubbleShell ? (isSent ? 'bg-bubble-out text-foreground border border-bubble-out-border chat-bubble-shadow' : 'bg-bubble-in text-foreground border border-bubble-in-border chat-bubble-shadow') :
               isNoBubbleMsg ? '' : isSent
-                ? 'px-3 py-2 bg-bubble-out text-foreground border border-bubble-out-border'
-                : 'px-3 py-2 bg-bubble-in text-foreground border border-bubble-in-border'
+                ? 'px-3.5 py-2.5 bg-bubble-out text-foreground border border-bubble-out-border chat-bubble-shadow'
+                : 'px-3.5 py-2.5 bg-bubble-in text-foreground border border-bubble-in-border chat-bubble-shadow'
             } ${useEmployeeStore.getState().mode === 'employee' && (msg.send_status === 'pending' ? 'opacity-60' : msg.send_status === 'sending' ? 'opacity-80' : '')}`}>
             {/* Posts: media flush with the edge (the text pads itself inside the photo / video frame), text posts have padding; the poster sits in the post footer */}
             <div className={telegramPostMeta && !postEdgeMedia ? 'px-3 pt-2' : undefined}>
@@ -466,7 +466,7 @@ export function renderMessageRow(ctx: MessageRowContext, msg: any, idx: number):
                 trailingSpacerClass={inlineTimeSpacerClass(!!outgoingStatus, (msg as any).ttl)} />
             )}
             {!telegramPostMeta && (inlineTime || timeOnReactionRow) ? (
-              <span className="absolute bottom-1.5 right-2.5 inline-flex items-center gap-0.5 text-[11px] leading-none text-subtle-foreground select-none cursor-default"
+              <span className={`absolute bottom-2 right-3 inline-flex items-center gap-0.5 text-[11px] leading-none tabular-nums select-none cursor-default ${isSent ? 'text-chat-time-out' : 'text-subtle-foreground'}`}
                 title={formatFullDateTime(msg.timestamp)}>
                 <TtlMark ttl={(msg as any).ttl} sentAt={msg.timestamp} />
                 {formatBubbleTime(msg.timestamp)}

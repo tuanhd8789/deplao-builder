@@ -14,6 +14,7 @@ import { tr } from '../../../shared/i18n';
 
 type AppView = 'chat' | 'ai' | 'friends' | 'settings' | 'dashboard' | 'crm' | 'workflow' | 'integration' | 'analytics' | 'erp' | 'plugin';
 export type AppTheme = 'dark' | 'light';
+export type AppUiSkin = 'zalo' | 'classic';
 
 export interface GroupMember {
   userId: string;
@@ -161,6 +162,8 @@ interface AppStore {
 
   theme: AppTheme;
   setTheme: (theme: AppTheme) => void;
+  uiSkin: AppUiSkin;
+  setUiSkin: (skin: AppUiSkin) => void;
   fontSizeScale: number;
   setFontSizeScale: (scale: number) => void;
 
@@ -324,6 +327,15 @@ const loadTheme = (): AppTheme => {
     if (stored === 'light' || stored === 'dark') return stored;
   } catch {}
   return 'light';
+};
+
+// ─── uiSkin persists in localStorage ('zalo' PC look by default) ────────────
+const loadUiSkin = (): AppUiSkin => {
+  try {
+    const stored = localStorage.getItem('app_ui_skin');
+    if (stored === 'classic' || stored === 'zalo') return stored;
+  } catch {}
+  return 'zalo';
 };
 
 // ─── notifSettings persists in localStorage (not account-specific) ──────────
@@ -494,6 +506,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   notifSettings: loadNotifSettings(),
   notifSettingsOverrides: loadNotifOverrides(),
   theme: loadTheme(),
+  uiSkin: loadUiSkin(),
   fontSizeScale: loadFontSizeScale(),
   groupInfoCache: {},
   othersConversations: {},
@@ -857,6 +870,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setTheme: (theme) => {
     try { localStorage.setItem('app_theme', theme); } catch {}
     set({ theme });
+  },
+
+  setUiSkin: (uiSkin) => {
+    try { localStorage.setItem('app_ui_skin', uiSkin); } catch {}
+    document.documentElement.dataset.uiSkin = uiSkin;
+    set({ uiSkin });
   },
 
   setFontSizeScale: (scale) => {

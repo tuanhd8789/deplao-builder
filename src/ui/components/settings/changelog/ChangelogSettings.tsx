@@ -18,6 +18,33 @@ interface VersionEntry {
 // ─── Changelog data - add the new entry at the TOP of the array when there is an update ────────
 const CHANGELOG: VersionEntry[] = [
   {
+    version: '26.11.5',
+    date: '11/2026',
+    type: 'minor',
+    highlights: [
+      tr('🎨 Bộ giao diện & màu sắc chuẩn Zalo PC: thanh trái xanh đặc trưng (#0091FF), nền khung chat #EBECF0, bong bóng tin nhắn #DBEBFF có đổ bóng nhẹ và chữ mực đậm #081C36 dễ đọc hơn hẳn.'),
+      tr('🔤 Phông chữ & tỷ lệ chữ quen thuộc như Zalo PC: ưu tiên Segoe UI / Roboto trên Windows, cỡ chữ hội thoại 15px, tin nhắn 15px, ảnh đại diện 48px và khung danh sách rộng 344px.'),
+      tr('🌓 Hỗ trợ chuyển linh hoạt giữa Zalo PC (Mặc định) và Deplao Cổ điển ngay trong Cài đặt → Giao diện (áp dụng cho cả chế độ Sáng và Tối).'),
+    ],
+    changes: [
+      {
+        category: 'new',
+        items: [
+          tr('Bổ sung mục Phong cách giao diện trong Cài đặt → Giao diện: cho phép chọn tức thì giữa Zalo PC (Mặc định) và Deplao Cổ điển mà không cần khởi động lại ứng dụng.'),
+        ],
+      },
+      {
+        category: 'improved',
+        items: [
+          tr('Bảng màu chuẩn Zalo PC (chế độ Sáng): thanh điều hướng trái xanh #0091FF với viền trắng cho tài khoản đang chọn, nền chat #EBECF0 tách bạch với header/khung soạn tin trắng, bong bóng tin gửi #DBEBFF kèm đổ bóng nhẹ và badge tin chưa đọc đỏ #C81A1F.'),
+          tr('Chế độ Tối Zalo PC hài hòa: giữ độ tương phản cao, tên/giờ tin nhắn rõ nét trong cả bong bóng tối lẫn bong bóng xanh navy.'),
+          tr('Đồng bộ phông chữ (Segoe UI / Roboto), làm mịn chữ antialiased, căn chỉnh ảnh đại diện 48px trong danh sách hội thoại & header, 36px cạnh tin nhắn, tên hội thoại 15px (đậm hơn khi có tin chưa đọc) và ô soạn tin 15px kèm viền focus xanh Zalo.'),
+          tr('Chiều rộng mặc định danh sách hội thoại nâng lên 344px chuẩn Zalo PC (vẫn tự nhớ nếu bạn kéo chỉnh kích thước khác).'),
+        ],
+      },
+    ],
+  },
+  {
     version: '26.11.4',
     date: '11/2026',
     type: 'minor',

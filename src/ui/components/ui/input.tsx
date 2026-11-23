@@ -3,9 +3,9 @@ import { cn } from '@/lib/cn';
 
 /** Shared look of every text control (Select mirrors this string). */
 const CONTROL_CLASSES =
-  'flex h-9 w-full rounded-lg border border-input bg-muted px-3 py-1.5 text-sm text-foreground ' +
+  'flex h-9 w-full rounded-[6px] border border-input bg-muted px-3 py-1.5 text-sm text-foreground ' +
   'placeholder:text-subtle-foreground transition-colors ' +
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-transparent ' +
   'disabled:cursor-not-allowed disabled:opacity-50';
 
 const INVALID_CLASSES = 'border-destructive focus-visible:ring-destructive';

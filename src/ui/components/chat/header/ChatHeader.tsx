@@ -689,13 +689,13 @@ export default function ChatHeader() {
     // My Documents: Zalo folder image; cloud icon when the image is missing / broken, and for Telegram (the row carrying your own image)
     if (isMyDocs && showsMyDocumentsIcon(activeAccount, avatarUrl, avatarFailed)) {
       return (
-        <div className="w-9 h-9 rounded-full flex items-center justify-center bg-gradient-to-br from-sky-400 to-blue-600" style={{ color: '#fff' }}>
-          <CloudIcon className="w-5 h-5" />
+        <div className="w-12 h-12 rounded-full flex items-center justify-center bg-gradient-to-br from-sky-400 to-blue-600" style={{ color: '#fff' }}>
+          <CloudIcon className="w-6 h-6" />
         </div>
       );
     }
     if (avatarUrl && !avatarFailed) {
-      return <img src={avatarUrl} alt={displayName} className={`w-9 h-9 rounded-full object-cover ${!isGroup ? 'hover:ring-2 hover:ring-blue-400 transition-all' : ''}`}
+      return <img src={avatarUrl} alt={displayName} className={`w-12 h-12 rounded-full object-cover ${!isGroup ? 'hover:ring-2 hover:ring-primary transition-all' : ''}`}
         onError={() => {
           setAvatarFailed(true);
           // Retry the avatar for both Zalo and Facebook
@@ -715,7 +715,7 @@ export default function ChatHeader() {
       const members = groupInfo?.members?.filter(m => m.avatar).slice(0, 4) || [];
       if (members.length >= 4) {
         return (
-          <div className="w-9 h-9 rounded-full overflow-hidden grid grid-cols-2 grid-rows-2 bg-green-700 flex-shrink-0">
+          <div className="w-12 h-12 rounded-full overflow-hidden grid grid-cols-2 grid-rows-2 bg-green-700 flex-shrink-0">
             {members.slice(0, 4).map((m, i) => (
               <div key={i} className="overflow-hidden">
                 <img src={m.avatar} alt="" className="w-full h-full object-cover"
@@ -727,7 +727,7 @@ export default function ChatHeader() {
       }
       if (members.length === 3) {
         return (
-          <div className="w-9 h-9 rounded-full overflow-hidden flex flex-row bg-green-700 flex-shrink-0">
+          <div className="w-12 h-12 rounded-full overflow-hidden flex flex-row bg-green-700 flex-shrink-0">
             <div className="flex-1 h-full overflow-hidden">
               <img src={members[0].avatar} alt="" className="w-full h-full object-cover"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
@@ -747,7 +747,7 @@ export default function ChatHeader() {
       }
       if (members.length === 2) {
         return (
-          <div className="w-9 h-9 rounded-full overflow-hidden flex flex-row bg-green-700 flex-shrink-0">
+          <div className="w-12 h-12 rounded-full overflow-hidden flex flex-row bg-green-700 flex-shrink-0">
             <div className="flex-1 h-full overflow-hidden">
               <img src={members[0].avatar} alt="" className="w-full h-full object-cover"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
@@ -760,18 +760,18 @@ export default function ChatHeader() {
         );
       }
       return (
-        <PeerInitials id={activeThreadId} name={displayName} fallback="G" className="w-9 h-9 text-xs" />
+        <PeerInitials id={activeThreadId} name={displayName} fallback="G" className="w-12 h-12 text-base" />
       );
     }
     return (
-      <PeerInitials id={activeThreadId} name={displayName} fallback="U" className="w-9 h-9 text-xs hover:ring-2 hover:ring-blue-400 transition-all" />
+      <PeerInitials id={activeThreadId} name={displayName} fallback="U" className="w-12 h-12 text-base hover:ring-2 hover:ring-primary transition-all" />
     );
   };
 
   return (
     <div className="flex flex-col border-b border-border bg-card flex-shrink-0">
       {/* Main header row */}
-      <div className="flex items-center gap-3 px-4 py-2.5">
+      <div className="flex items-center gap-3 px-4 py-2.5 min-h-[68px]">
         {/* Mobile back button - return to conversation list */}
         {isMobile && (
           <button
@@ -807,7 +807,7 @@ export default function ChatHeader() {
               title={copied ? tr('Đã sao chép!') : tr('Nhấn để sao chép tên')}
               className="flex items-center gap-1 group text-left min-w-0 overflow-hidden"
             >
-              <p className="text-md font-semibold text-foreground truncate group-hover:text-blue-300 transition-colors">{displayName}</p>
+              <p className="text-[17px] leading-6 font-semibold tracking-[-0.01em] text-foreground truncate group-hover:text-primary transition-colors">{displayName}</p>
               {copied
                 ? <span className="text-xs text-green-400 flex-shrink-0">✓</span>
                 : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="opacity-50 flex-shrink-0 transition-opacity">
@@ -881,7 +881,7 @@ export default function ChatHeader() {
           </div>
           {/* Merged inbox: which account's My Documents */}
           {isMyDocs && mergedInboxMode && (
-            <p className="mt-0.5 text-[11px] text-muted-foreground truncate">{activeAccount?.full_name || activeAccountId}</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground truncate">{activeAccount?.full_name || activeAccountId}</p>
           )}
           {/* Zalo 1:1: "Trực tuyến" (Online) / "Truy cập 14:05" (Last seen 14:05) from data already present, no extra Zalo request (ZL-01 phase 2) */}
           {!isGroup && !isMyDocs && isZalo(activeAccount?.channel) && (
@@ -891,7 +891,7 @@ export default function ChatHeader() {
             <button
               type="button"
               onClick={openTelegramMembers}
-              className="mt-0.5 text-[11px] text-muted-foreground hover:text-blue-300 transition-colors text-left"
+              className="mt-0.5 text-[13px] text-muted-foreground hover:text-primary transition-colors text-left"
               title={tr('Xem danh sách thành viên')}
             >
               {telegramMemberCount > 0 && `${telegramMemberCount.toLocaleString()} ${telegramAudienceLabel}`}

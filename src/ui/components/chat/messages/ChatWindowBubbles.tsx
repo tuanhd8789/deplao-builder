@@ -66,8 +66,8 @@ const telegramMediaRepairInFlight = new Map<string, Promise<TelegramMediaRepairR
  */
 function bubbleSurface(isSent?: boolean): string {
     return isSent
-        ? 'bg-bubble-out text-foreground border border-bubble-out-border'
-        : 'bg-bubble-in text-foreground border border-bubble-in-border';
+        ? 'bg-bubble-out text-foreground border border-bubble-out-border chat-bubble-shadow'
+        : 'bg-bubble-in text-foreground border border-bubble-in-border chat-bubble-shadow';
 }
 
 /**

@@ -430,8 +430,8 @@ export default function Settings() {
 
 /** Preview colors of each theme (fixed, so the "Tối" (Dark) card stays dark when the app is light, and vice versa). */
 const THEME_PREVIEW = {
-  dark: { bg: '#131518', panel: '#1c1f25', line: '#373f49', primary: '#2f7bff' },
-  light: { bg: '#eceef3', panel: '#ffffff', line: '#dde1e7', primary: '#1f6bf2' },
+  dark: { bg: '#15181c', rail: '#14181d', panel: '#1d2127', line: '#37404c', bubbleOut: '#1c3960', primary: '#1a78ff' },
+  light: { bg: '#ebecf0', rail: '#0091ff', panel: '#ffffff', line: '#d6dbe1', bubbleOut: '#dbebff', primary: '#0068ff' },
 } as const;
 
 function ThemeCard({ label, icon, preview, active, onSelect }: {
@@ -454,11 +454,12 @@ function ThemeCard({ label, icon, preview, active, onSelect }: {
       )}
     >
       <div className="flex h-20 gap-1.5 overflow-hidden rounded-lg p-1.5" style={{ backgroundColor: preview.bg }}>
-        <div className="w-7 rounded-md" style={{ backgroundColor: preview.panel }} />
-        <div className="flex flex-1 flex-col justify-end gap-1.5 rounded-md p-1.5" style={{ backgroundColor: preview.panel }}>
-          <div className="h-2 w-3/4 rounded-full" style={{ backgroundColor: preview.line }} />
-          <div className="h-2 w-1/2 self-end rounded-full" style={{ backgroundColor: preview.primary }} />
-          <div className="h-2 w-2/3 rounded-full" style={{ backgroundColor: preview.line }} />
+        <div className="w-3 rounded-md" style={{ backgroundColor: preview.rail }} />
+        <div className="w-6 rounded-md" style={{ backgroundColor: preview.panel }} />
+        <div className="flex flex-1 flex-col justify-end gap-1.5 rounded-md p-1.5" style={{ backgroundColor: preview.bg }}>
+          <div className="h-2.5 w-3/4 rounded-md" style={{ backgroundColor: preview.panel }} />
+          <div className="h-2.5 w-1/2 self-end rounded-md" style={{ backgroundColor: preview.bubbleOut }} />
+          <div className="h-2 w-2/3 rounded-md" style={{ backgroundColor: preview.line }} />
         </div>
       </div>
       <div className="mt-2 flex items-center gap-1.5 px-1 text-sm">
@@ -473,6 +474,8 @@ function ThemeCard({ label, icon, preview, active, onSelect }: {
 function AppearancePage() {
   const theme = useAppStore(s => s.theme);
   const setTheme = useAppStore(s => s.setTheme);
+  const uiSkin = useAppStore(s => s.uiSkin);
+  const setUiSkin = useAppStore(s => s.setUiSkin);
   const fontSizeScale = useAppStore(s => s.fontSizeScale);
   const setFontSizeScale = useAppStore(s => s.setFontSizeScale);
   const [showDesignSystem, setShowDesignSystem] = useState(false);
@@ -514,6 +517,35 @@ function AppearancePage() {
           <ThemeCard label={tr('Tối')} icon={<MoonIcon className="h-4 w-4" />} preview={THEME_PREVIEW.dark}
             active={theme === 'dark'} onSelect={() => setTheme('dark')} />
         </div>
+      </SettingsSection>
+
+      <SettingsSection title={tr('Phong cách giao diện')}>
+        <SettingsRow
+          title={tr('Bảng màu & Phông chữ')}
+          description={tr('Mặc định dùng giao diện chuẩn Zalo PC (Segoe UI, thanh trái xanh Zalo, bong bóng chat và tỷ lệ chữ đồng bộ).')}
+          control={(
+            <div role="radiogroup" aria-label={tr('Phong cách giao diện')} className="flex items-center gap-2">
+              <Button
+                variant={uiSkin === 'zalo' ? 'primary' : 'outline'}
+                size="sm"
+                role="radio"
+                aria-checked={uiSkin === 'zalo'}
+                onClick={() => setUiSkin('zalo')}
+              >
+                {tr('Zalo PC')}
+              </Button>
+              <Button
+                variant={uiSkin === 'classic' ? 'primary' : 'outline'}
+                size="sm"
+                role="radio"
+                aria-checked={uiSkin === 'classic'}
+                onClick={() => setUiSkin('classic')}
+              >
+                {tr('Deplao Cổ điển')}
+              </Button>
+            </div>
+          )}
+        />
       </SettingsSection>
 
       <SettingsSection title={tr('Cỡ chữ')}>

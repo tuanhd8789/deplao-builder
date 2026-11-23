@@ -113,6 +113,8 @@ function prepareBootScreen(): void {
     // Same default as appStore.loadTheme: light unless dark was chosen
     const saved = (globalThis as any).localStorage?.getItem('app_theme');
     pageDocument.documentElement.dataset.theme = saved === 'dark' ? 'dark' : 'light';
+    const savedSkin = (globalThis as any).localStorage?.getItem('app_ui_skin');
+    pageDocument.documentElement.dataset.uiSkin = savedSkin === 'classic' ? 'classic' : 'zalo';
   } catch { /* storage unavailable: keep the dark pre-paint */ }
   boot.querySelectorAll('[data-boot]').forEach((el: any) => {
     const text = BOOT_TEXT[el.dataset?.boot || ''];

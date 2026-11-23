@@ -227,8 +227,8 @@ export default function ChatWindow() {
             Mouse events do not pass through: hovering / clicking does not hit the messages hidden underneath (the reaction bar at z-30 cannot open while loading).
             The spinner only appears when loading takes longer than ~300 ms (chat-loading-reveal): messages on this machine open almost at once → no flicker of
             "Đang tải..." on each conversation switch; the background layer still covers at once so the list is not seen before scrolling to the bottom. */}
-        {loadingSpinner && <div className="absolute inset-0 z-30 flex items-center justify-center bg-background"><div className="chat-loading-reveal flex flex-col items-center gap-3"><div className="w-8 h-8 border-4 border-blue-400 border-t-transparent rounded-full animate-spin"></div><p className="text-sm text-muted-foreground">{tr('Đang tải...')}</p></div></div>}
-        <div ref={messagesContentRef} className="p-4 space-y-1.5">
+        {loadingSpinner && <div className="absolute inset-0 z-30 flex items-center justify-center bg-background"><div className="chat-loading-reveal flex flex-col items-center gap-3"><div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div><p className="text-sm text-muted-foreground">{tr('Đang tải...')}</p></div></div>}
+        <div ref={messagesContentRef} className="px-5 py-4 space-y-1.5">
         {/* Load More Button: shown on the first (oldest) message. Only when loading is slow, on error, or when older messages are known to remain
             - "có thể còn" (may have more, the default on open) does not show it: scrolling near the top loads them automatically. */}
         {msgs.length > 0 && (loadError || loadingMore || (hasMore && olderKnown)) && (

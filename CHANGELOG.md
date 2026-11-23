@@ -1,5 +1,22 @@
 # Nhật ký thay đổi — Deplao
 
+## v26.11.5 (23/11/2026)
+
+### Điểm nổi bật
+- **Giao diện, phông chữ & bảng màu chuẩn Zalo PC**: Làm mới toàn bộ hệ thống màu sắc, cỡ chữ và tỷ lệ khung chat theo đúng thói quen dùng Zalo PC hằng ngày.
+- **Mặc định dùng giao diện Zalo PC + tùy chọn quay lại bản cũ**: Hỗ trợ chuyển đổi tức thì giữa **Zalo PC (Mặc định)** và **Deplao Cổ điển** trong **Cài đặt → Giao diện**.
+
+### Chi tiết
+- **Bảng màu Zalo PC (Sáng & Tối)**:
+  - **Chế độ Sáng**: Thanh điều hướng bên trái xanh Zalo `#0091FF`, nền vùng chat `#EBECF0`, panel/danh sách/header trắng `#FFFFFF`, bong bóng tin gửi `#DBEBFF` có đổ bóng nhẹ, chữ chính `#081C36`, màu nhấn `#0068FF` và chấm số tin chưa đọc đỏ `#C81A1F`.
+  - **Chế độ Tối**: Nền `#15181C` / `#1D2127`, bong bóng gửi `#1C3960`, thanh nhấn `#1A78FF` dịu mắt và tương phản chuẩn.
+- **Typography & Tỷ lệ hiển thị chuẩn Zalo PC**:
+  - Dùng `Segoe UI` / `-apple-system` / `Roboto`, bật `-webkit-font-smoothing: antialiased` và `tabular-nums` cho toàn bộ mốc giờ / số chưa đọc.
+  - Cỡ chữ hội thoại **15px** (in đậm rõ ràng khi chưa đọc), dòng xem trước **13.5px**, tiêu đề chat **17px**, bong bóng tin nhắn & ô nhập tin **15px**.
+  - Kích thước avatar danh sách & header **48px**, avatar trong khung chat **36px**, chiều rộng mặc định danh sách hội thoại **344px**, nút và ô nhập bo góc **6px**, khung soạn tin hiện đường kẻ xanh Zalo khi đang nhập.
+
+---
+
 ## v26.11.4 (22/11/2026)
 
 ### Điểm nổi bật
