@@ -1,5 +1,14 @@
 # Nhật ký thay đổi — Deplao
 
+## v26.11.6 (23/11/2026)
+
+### Cải thiện
+- **Nét chữ & độ đậm chuẩn Zalo PC**: Tắt `-webkit-font-smoothing: antialiased` để Windows ClearType hiển thị `Segoe UI` mảnh gọn tự nhiên; bỏ `font-medium`/`font-semibold` thừa ở tên hội thoại đã đọc, tab không chọn và tên người gửi trong nhóm.
+- **Bỏ tô 7 màu cầu vồng trên tên người gửi & quote ở giao diện Zalo PC**: Tên người gửi trong nhóm dùng màu phụ dịu mắt, khung trả lời dùng vạch xanh Zalo mảnh `2px` gọn gàng.
+- **Bộ icon cảm xúc 3D kiểu Zalo PC (`ZaloReactionGlyph`)**: Thay 6 biểu tượng cảm xúc mặc định viền đen dày của Windows (`👍 ❤️ 😆 😮 😭 😡`) bằng icon vector 3D bóng mượt đồng bộ trên thanh chọn cảm xúc, góc tin nhắn, menu chuột phải, popup xem người thả và nút 👍 nhanh ở ô soạn tin.
+
+---
+
 ## v26.11.5 (23/11/2026)
 
 ### Điểm nổi bật

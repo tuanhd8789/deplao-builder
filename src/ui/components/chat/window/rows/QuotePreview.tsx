@@ -141,7 +141,7 @@ export function QuotePreview({ ctx, msg, isSent, quoteShell, isNoBubbleMsg, post
 
     return (
       <div
-        className={`${quotePeer !== null ? `border-l-[3px] chat-peer-${quotePeer} chat-peer-quote` : `border-l-2 ${(quoteShell || !isNoBubbleMsg) ? (isSent ? 'border-primary bg-primary/20' : 'border-border-strong bg-background') : (isSent ? 'border-primary bg-bubble-out' : 'border-border-strong bg-bubble-in')}`} rounded pl-2 pr-1 py-1 text-xs cursor-pointer hover:opacity-100 overflow-hidden min-w-0 ${quoteShell ? 'w-0 min-w-[calc(100%-1rem)] mx-2 mt-2 mb-1.5' : postEdgeMedia ? 'mx-3 mt-2 mb-1.5' : 'mb-1 max-w-full'}`}
+        className={`${quotePeer !== null ? `border-l-[2px] chat-peer-${quotePeer} chat-peer-quote` : `border-l-2 ${(quoteShell || !isNoBubbleMsg) ? (isSent ? 'border-primary bg-primary/20' : 'border-border-strong bg-background') : (isSent ? 'border-primary bg-bubble-out' : 'border-border-strong bg-bubble-in')}`} rounded pl-2 pr-1 py-1 text-xs cursor-pointer hover:opacity-100 overflow-hidden min-w-0 ${quoteShell ? 'w-0 min-w-[calc(100%-1rem)] mx-2 mt-2 mb-1.5' : postEdgeMedia ? 'mx-3 mt-2 mb-1.5' : 'mb-1 max-w-full'}`}
         onClick={() => handleScrollToMsg(String(q.msgId || ''), String(q.cliMsgId || ''))}
       >
         {(isQuotedSticker || finalImgUrl) ? (() => {
@@ -163,14 +163,14 @@ export function QuotePreview({ ctx, msg, isSent, quoteShell, isNoBubbleMsg, post
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                {quoteAuthor && <p className={`font-semibold truncate ${quotePeer !== null ? 'chat-peer-name' : 'text-foreground'}`}>{quoteAuthor}</p>}
+                {quoteAuthor && <p className={`font-medium truncate ${quotePeer !== null ? 'chat-peer-name' : 'text-foreground'}`}>{quoteAuthor}</p>}
                 <p className={`truncate ${quoteCaption ? 'text-foreground/80' : 'text-muted-foreground'}${quotePeer !== null ? ' w-0 min-w-full' : ''}`}>{quoteLabel}</p>
               </div>
             </div>
           );
         })() : (
           <>
-            {quoteAuthor && <p className={`font-semibold truncate ${quotePeer !== null ? 'chat-peer-name' : 'text-foreground'}`}>{quoteAuthor}</p>}
+            {quoteAuthor && <p className={`font-medium truncate ${quotePeer !== null ? 'chat-peer-name' : 'text-foreground'}`}>{quoteAuthor}</p>}
             <p className={`line-clamp-2 break-words whitespace-pre-wrap mt-1 mb-1${quotePeer !== null ? ' w-0 min-w-full' : ''}`}>{quoteDisplayText}</p>
           </>
         )}

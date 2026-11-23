@@ -13,6 +13,7 @@
 import React from 'react';
 import { CloseIcon, ThumbsUpIcon } from '@/components/common/icons';
 import { displayReactionEmoji } from './ReactionComponents';
+import { ZaloReactionGlyph } from './ZaloReactionIcons';
 import { REACTION_BUTTON_REVEAL_CLASS } from './MessageReactionCorner';
 import { tr } from '../../../../../shared/i18n';
 
@@ -69,7 +70,7 @@ export function ZaloReactionBar({ emojis, canRemove, onPick, onRemove }: {
       className={`absolute z-30 ${below ? 'top-full pt-1.5' : 'bottom-full pb-1.5'} ${layout.align === 'right' ? 'right-0' : 'left-0'}`}
       data-side={layout.side}
     >
-      <div role="menu" aria-label={tr('Thả cảm xúc')} className="flex items-center gap-0.5 rounded-full border border-input bg-card px-1.5 py-1 shadow-2xl">
+      <div role="menu" aria-label={tr('Thả cảm xúc')} className="flex items-center gap-1 rounded-full border border-input bg-card px-2 py-1 shadow-xl">
         {emojis.map((emoji) => (
           <button
             key={emoji}
@@ -80,7 +81,7 @@ export function ZaloReactionBar({ emojis, canRemove, onPick, onRemove }: {
             title={displayReactionEmoji(emoji)}
             className="group/react flex h-9 w-9 shrink-0 items-center justify-center rounded-full hover:bg-muted"
           >
-            <span className="text-[1.375rem] leading-none transition-transform group-hover/react:scale-125">{displayReactionEmoji(emoji)}</span>
+            <ZaloReactionGlyph emoji={emoji} size={26} className="transition-transform group-hover/react:scale-125" />
           </button>
         ))}
         {canRemove && (
@@ -140,9 +141,9 @@ export function ZaloReactionCorner({
           data-zalo-reaction-summary=""
           onClick={onShowReactors}
           title={tr('Xem ai đã thả cảm xúc')}
-          className="flex h-[1.375rem] items-center gap-0.5 rounded-full border border-input bg-card px-1.5 text-xs leading-none shadow-sm transition-colors hover:bg-muted"
+          className="flex h-[1.375rem] items-center gap-1 rounded-full border border-input bg-card px-1.5 text-xs leading-none shadow-sm transition-colors hover:bg-muted"
         >
-          {top.map((emoji) => <span key={emoji}>{displayReactionEmoji(emoji)}</span>)}
+          {top.map((emoji) => <ZaloReactionGlyph key={emoji} emoji={emoji} size={15} />)}
           <span className="ml-0.5 text-[11px] tabular-nums text-foreground/80">{total}</span>
         </button>
       )}
@@ -158,7 +159,7 @@ export function ZaloReactionCorner({
           }`}
         >
           {myEmoji
-            ? <span className="text-[0.8125rem] leading-none">{displayReactionEmoji(myEmoji)}</span>
+            ? <ZaloReactionGlyph emoji={myEmoji} size={15} />
             : <ThumbsUpIcon className="h-3.5 w-3.5" />}
         </button>
       </div>

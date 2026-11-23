@@ -31,6 +31,7 @@ import BankCardModal from './BankCardModal';
 import ZaloCatalogPicker from '../zalo/catalog/ZaloCatalogPicker';
 import LibraryPickerModal from './LibraryPickerModal';
 import ZaloStickerStore from './ZaloStickerStore';
+import { ZaloReactionGlyph } from '../messages/reactions/ZaloReactionIcons';
 import { mergeStickerSuggestions, zaloApiStickerSuggestions, zaloKeywordStickerSuggestions } from '@/lib/chat/zalo/zaloStickers';
 import {
   fetchQuickMessages,
@@ -4022,10 +4023,10 @@ export default function MessageInput() {
           <button
             onClick={handleSendLike}
             disabled={sending}
-            className="flex-shrink-0 w-9 h-9 rounded-[6px] hover:bg-muted flex items-center justify-center text-primary transition-colors text-xl"
+            className="flex-shrink-0 w-9 h-9 rounded-[6px] hover:bg-muted flex items-center justify-center transition-colors"
             title={tr('Gửi 👍')}
           >
-            👍
+            <ZaloReactionGlyph emoji="👍" size={22} />
           </button>
         )}
       </div>

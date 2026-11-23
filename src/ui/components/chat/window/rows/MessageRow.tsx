@@ -308,7 +308,7 @@ export function renderMessageRow(ctx: MessageRowContext, msg: any, idx: number):
             {/* Sender name in a group for messages without a frame (stickers…); messages with a frame: inside the bubble (nameInBubble) */}
             {showGroupName && !nameInBubble && (
               <p className="flex items-center gap-2 mb-0.5 px-1 min-w-0 max-w-full">
-                <span className={`chat-peer-${senderPeer ?? 5} chat-peer-name truncate text-xs font-semibold`}>{displayName}</span>
+                <span className={`chat-peer-${senderPeer ?? 5} chat-peer-name truncate text-xs font-normal`}>{displayName}</span>
                 {senderRank && <span className="chat-rank shrink-0 rounded-full px-1.5 py-px text-[10px] leading-4">{senderRank}</span>}
               </p>
             )}
@@ -344,7 +344,7 @@ export function renderMessageRow(ctx: MessageRowContext, msg: any, idx: number):
               <div className={`flex items-center gap-2 min-w-0 ${bubbleShell ? `px-2.5 pt-1.5${quoteShell ? '' : ' pb-1.5'}` : 'mb-0.5'}${nameShell ? ' w-0 min-w-full' : ''}`}>
                 <button
                   type="button"
-                  className={`chat-peer-${senderPeer ?? 5} chat-peer-name min-w-0 truncate text-left text-[13px] font-semibold leading-5 hover:underline`}
+                  className={`chat-peer-${senderPeer ?? 5} chat-peer-name min-w-0 truncate text-left text-[13px] font-normal leading-5 hover:underline`}
                   onClick={(e) => {
                     e.stopPropagation();
                     setUserProfilePopup({ userId: msg.sender_id, x: e.clientX, y: e.clientY });

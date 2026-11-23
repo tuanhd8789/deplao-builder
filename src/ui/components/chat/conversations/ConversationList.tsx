@@ -3191,7 +3191,7 @@ export default function ConversationList() {
               <div className="relative flex-shrink-0"><MyDocumentsIcon /></div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-1">
-                  <span className={`text-[15px] leading-[22px] text-foreground truncate flex items-center gap-1 ${myDocsSummary.unread > 0 ? 'font-semibold' : 'font-medium'}`}>
+                  <span className={`text-[15px] leading-[22px] text-foreground truncate flex items-center gap-1 ${myDocsSummary.unread > 0 ? 'font-semibold' : 'font-normal'}`}>
                     <span title={tr('My Documents luôn ở đầu (như Zalo)')}><PinIcon className="w-4 h-4" /></span>
                     <span className="truncate">{MY_DOCUMENTS_NAME}</span>
                   </span>
@@ -3328,7 +3328,7 @@ export default function ConversationList() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-1">
-                  <span className={`text-[15px] leading-[22px] text-foreground truncate flex items-center gap-1 ${contact.unread_count > 0 ? 'font-semibold' : 'font-medium'}`}>
+                  <span className={`text-[15px] leading-[22px] text-foreground truncate flex items-center gap-1 ${contact.unread_count > 0 ? 'font-semibold' : 'font-normal'}`}>
                     {isMyDocs && <span title={tr('My Documents luôn ở đầu (như Zalo)')}><PinIcon className="w-4 h-4" /></span>}
                     {!isMyDocs && isLocalPinned && <span title={tr('Ghim trong app')}>📍</span>}
                     {!isMyDocs && isPinned && <span title={tr('Ghim Zalo')}><PinIcon className="w-4 h-4" /></span>}
@@ -3607,7 +3607,7 @@ export default function ConversationList() {
 
 function TabBtn({ label, active, onClick, badge, fullWidth }: { label: string; active: boolean; onClick: () => void; badge?: number; fullWidth?: boolean }) {
   return (
-    <button onClick={onClick} className={`${fullWidth ? 'w-full' : 'flex-1'} h-10 flex items-center justify-center text-[13.5px] font-semibold transition-colors whitespace-nowrap px-3 ${active ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground hover:text-foreground'}`}>
+    <button onClick={onClick} className={`${fullWidth ? 'w-full' : 'flex-1'} h-10 flex items-center justify-center text-[13.5px] transition-colors whitespace-nowrap px-3 ${active ? 'font-semibold text-primary border-b-2 border-primary' : 'font-normal text-muted-foreground hover:text-foreground'}`}>
       {label}
       {badge !== undefined && badge > 0 && <span className="ml-1.5 bg-unread-badge text-white-important text-[11px] font-semibold leading-none tabular-nums rounded-full h-[18px] min-w-[18px] px-1.5 inline-flex items-center justify-center">{badge > 99 ? '99+' : badge}</span>}
     </button>

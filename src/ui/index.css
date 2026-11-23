@@ -223,7 +223,6 @@ html[data-theme="light"][data-ui-skin="classic"] {
     overflow: hidden;
     -webkit-user-select: text;
     user-select: text;
-    -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
   ::selection {
@@ -535,6 +534,20 @@ html[data-theme="light"] input[type="datetime-local"] {
 .chat-peer-quote { border-left-color: rgb(var(--chat-peer)); background-color: rgb(var(--chat-peer) / 0.12); }
 .chat-peer-avatar { background-image: linear-gradient(to bottom, var(--chat-avatar-from), var(--chat-avatar-to)); color: #fff; }
 .chat-rank { color: rgb(var(--chat-rank)); background-color: rgb(var(--chat-rank) / 0.16); }
+
+/* Giao diện Zalo PC: tên người gửi & trích dẫn dùng sắc độ trung tính/xanh Zalo thay cho 7 màu cầu vồng của Telegram */
+html:not([data-ui-skin="classic"]) .chat-peer-name {
+  color: rgb(var(--muted-foreground));
+  font-weight: 400;
+}
+html:not([data-ui-skin="classic"]) .chat-peer-quote {
+  border-left-color: rgb(var(--primary));
+  background-color: rgb(var(--foreground) / 0.05);
+}
+html:not([data-ui-skin="classic"]) .chat-peer-quote .chat-peer-name {
+  color: rgb(var(--foreground));
+  font-weight: 500;
+}
 
 /* Link trong tin nhắn (linkifyText → .chat-link), CHỈ giao diện tối: xanh da trời nhạt, không gạch chân (gạch khi rê
    chuột). Xanh dương cũ + gạch chân khó đọc trên bong bóng gửi (navy, tương phản 4.2); màu ngọc của Telegram lệch tông

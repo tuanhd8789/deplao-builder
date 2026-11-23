@@ -10,6 +10,7 @@ import { isZalo } from '@/lib/channels/channelHelper';
 import TelegramReadReceipts, { type ReadReceiptPerson } from '../telegram/messages/TelegramReadReceipts';
 import { ReactionGrid } from './reactions/ReactionPicker';
 import { displayReactionEmoji } from './reactions/ReactionComponents';
+import { ZaloReactionGlyph } from './reactions/ZaloReactionIcons';
 import { sameReaction, ZALO_QUICK_REACTIONS } from '@/lib/chat/reactions/reactionChoices';
 import { tr } from '../../../../shared/i18n';
 
@@ -305,9 +306,9 @@ export default function MessageContextMenu({
             {quickReactions.map((emoji) => (
               <button key={emoji}
                 onClick={() => pickReaction(emoji)}
-                className={`text-xl leading-none p-0.5 rounded-lg hover:scale-125 transition-transform ${!addsOnly && sameReaction(emoji, myReaction) ? 'bg-muted ring-1 ring-primary' : ''}`}
+                className={`p-1 rounded-lg hover:scale-125 transition-transform flex items-center justify-center ${!addsOnly && sameReaction(emoji, myReaction) ? 'bg-muted ring-1 ring-primary' : ''}`}
                 title={!addsOnly && sameReaction(emoji, myReaction) ? tr('Bấm lần nữa để gỡ') : displayReactionEmoji(emoji)}>
-                {displayReactionEmoji(emoji)}
+                <ZaloReactionGlyph emoji={emoji} size={22} />
               </button>
             ))}
             {/* Zalo: ✕ removes all your reactions on the message, like Zalo's bar */}

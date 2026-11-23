@@ -5,6 +5,7 @@ import { toLocalMediaUrl } from '@/lib/media/localMedia';
 import { useAccountStore } from '@/store/accounts/accountStore';
 import { mergeZaloReactionAliases } from '../../../../../shared/zalo/zaloReactions';
 import PeerInitials from '@/components/common/avatars/PeerInitials';
+import { ZaloReactionGlyph } from './ZaloReactionIcons';
 import { tr, appLocale } from '../../../../../shared/i18n';
 import { trx } from '@/lib/i18n/trx';
 
@@ -161,10 +162,10 @@ function ReactionContextMenu({ x, y, msg, myEmoji, onClose, onReact, onCancel }:
           <button
             key={emoji}
             onClick={() => onReact(msg, emoji)}
-            className={`text-xl p-1 rounded-lg hover:bg-muted transition-colors hover:scale-125 ${myEmoji === emoji ? 'bg-muted ring-1 ring-blue-400' : ''}`}
+            className={`p-1 rounded-lg hover:bg-muted transition-colors hover:scale-125 flex items-center justify-center ${myEmoji === emoji ? 'bg-muted ring-1 ring-primary' : ''}`}
             title={emoji}
           >
-            {emoji}
+            <ZaloReactionGlyph emoji={emoji} size={20} />
           </button>
         ))}
         {/* X button to cancel current reaction */}
@@ -296,7 +297,7 @@ function ReactionPopup({ msg, initialEmoji, contacts, groupMembers, currentUserI
               </button>
               {kinds.map(([emo, entry]) => (
                 <button key={emo} type="button" role="tab" aria-selected={tab === emo} onClick={() => setTab(emo)} className={tabClass(tab === emo)}>
-                  <span className="text-lg leading-none">{displayReactionEmoji(emo)}</span><span className="tabular-nums">{entry.total}</span>
+                  <ZaloReactionGlyph emoji={emo} size={18} /><span className="tabular-nums">{entry.total}</span>
                 </button>
               ))}
             </div>
@@ -312,7 +313,7 @@ function ReactionPopup({ msg, initialEmoji, contacts, groupMembers, currentUserI
                   <p className="flex-1 min-w-0 truncate text-sm text-foreground">{getName(uid)}</p>
                   <span className="flex shrink-0 items-center gap-0.5 text-base leading-none">
                     {Object.entries(emojis).sort((a, b) => (b[1] as number) - (a[1] as number)).map(([emo]) => (
-                      <span key={emo}>{displayReactionEmoji(emo)}</span>
+                      <ZaloReactionGlyph key={emo} emoji={emo} size={16} />
                     ))}
                     <span className="ml-1 text-sm tabular-nums text-muted-foreground">{total}</span>
                   </span>

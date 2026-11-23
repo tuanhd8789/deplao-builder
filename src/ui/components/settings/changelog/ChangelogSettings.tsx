@@ -18,6 +18,26 @@ interface VersionEntry {
 // ─── Changelog data - add the new entry at the TOP of the array when there is an update ────────
 const CHANGELOG: VersionEntry[] = [
   {
+    version: '26.11.6',
+    date: '11/2026',
+    type: 'patch',
+    highlights: [
+      tr('🔤 Chỉnh nét chữ Segoe UI mảnh gọn đúng chuẩn Zalo PC: giữ nguyên ClearType gốc của Windows, bỏ độ đậm dư thừa ở tên hội thoại đã đọc, tab lọc và tên người gửi trong nhóm.'),
+      tr('🎯 Bỏ tô 7 màu cầu vồng trên tên người gửi & trích dẫn trong khung chat ở chế độ Zalo PC: tên người gửi dùng màu chữ phụ nhẹ nhàng, khung trả lời dùng vạch xanh Zalo gọn gàng.'),
+      tr('😍 Thay bộ icon cảm xúc 👍 ❤️ 😆 😮 😭 😡 bằng icon SVG 3D bóng mượt giống Zalo PC (không còn viền đen dày của emoji mặc định Windows).'),
+    ],
+    changes: [
+      {
+        category: 'improved',
+        items: [
+          tr('Bỏ -webkit-font-smoothing: antialiased để Windows ClearType hiển thị phông Segoe UI sắc nét và mảnh đúng như Zalo PC.'),
+          tr('Tên hội thoại đã đọc dùng font-normal (chỉ in đậm khi có tin chưa đọc); tên người gửi trong nhóm và khung trích dẫn dùng sắc độ trung tính gọn gàng, không tô màu cầu vồng rối mắt.'),
+          tr('Thay 6 biểu tượng cảm xúc Zalo (thanh thả cảm xúc, tổng hợp cảm xúc ở góc tin, menu chuột phải, popup Biểu cảm và nút 👍 nhanh) bằng bộ icon vector 3D mượt mắt kiểu Zalo PC.'),
+        ],
+      },
+    ],
+  },
+  {
     version: '26.11.5',
     date: '11/2026',
     type: 'minor',
